@@ -70,9 +70,6 @@ def run_analysis_v1(
     cfg = config or EngineConfig()
     aid = analysis_id or str(uuid4())
 
-    if input_path is not None:
-        audio = decode_wav_v1(Path(input_path))
-
     # If caller provided only audio, derive TrackInfo best-effort
     if track is None:
         fmt = getattr(audio, "format", "unknown")
