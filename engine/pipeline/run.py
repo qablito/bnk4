@@ -14,7 +14,7 @@ from engine.features.bpm_v1 import extract_bpm_v1
 from engine.features.key_mode_v1 import extract_key_mode_v1
 
 from pathlib import Path
-from engine.ingest.decode_wav_v1 import decode_wav_v1
+from engine.ingest.ingest_v1 import decode_input_path_v1
 
 Role = Literal["guest", "free", "pro"]
 
@@ -61,10 +61,7 @@ def run_analysis_v1(
     
     # --- Normalize input_path -> audio (v1: WAV only via stdlib ingest) ---
     if input_path is not None:
-        p = Path(input_path)
-        if p.suffix.lower() != ".wav":
-            raise ValueError("v1 input_path only supports .wav")
-        audio = decode_wav_v1(p)
+        audio = decode_input_path_v1(Path(input_path))
         input_path = None
 
     cfg = config or EngineConfig()
