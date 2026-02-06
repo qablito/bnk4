@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from engine.core.config import EngineConfig
 from engine.features.types import FeatureContext
+from engine.observability import hooks
 
 
 def _round_bpm(x: float) -> int:
@@ -37,6 +38,7 @@ def extract_bpm_v1(ctx: FeatureContext, *, config: EngineConfig) -> Optional[Dic
     if ctx.bpm_hint_exact is None:
         confidence = 0.2
         if confidence < config.tunables.bpm_min_confidence_omit:
+            hooks.emit("feature_omitted", feature="bpm", reason="confidence_below_threshold", stage="feature:bpm")
             return None
         # (unreachable with defaults, but keep consistent)
         bpm_exact = 120.0
@@ -45,6 +47,7 @@ def extract_bpm_v1(ctx: FeatureContext, *, config: EngineConfig) -> Optional[Dic
         confidence = 0.8
 
     if confidence < config.tunables.bpm_min_confidence_omit:
+        hooks.emit("feature_omitted", feature="bpm", reason="confidence_below_threshold", stage="feature:bpm")
         return None
 
     bpm_rounded = _round_bpm(bpm_exact)
