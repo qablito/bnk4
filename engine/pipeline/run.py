@@ -13,6 +13,8 @@ from engine.features.types import FeatureContext
 from engine.features.bpm_v1 import extract_bpm_v1
 from engine.features.key_mode_v1 import extract_key_mode_v1
 
+from engine.packaging.package_output_v1 import package_output_v1
+
 from pathlib import Path
 from engine.ingest.ingest_v1 import decode_input_path_v1
 
@@ -139,4 +141,7 @@ def run_analysis_v1(
         if key_mode_block is not None:
             metrics["key_mode"] = key_mode_block
 
-    return out
+    # Final v1 packaging step (role gating).
+    if role is None:
+        return out
+    return package_output_v1(out, role=role)
