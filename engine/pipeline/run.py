@@ -13,6 +13,9 @@ from engine.features.types import FeatureContext
 from engine.features.bpm_v1 import extract_bpm_v1
 from engine.features.key_mode_v1 import extract_key_mode_v1
 
+from pathlib import Path
+from engine.ingest.decode_wav_v1 import decode_wav_v1
+
 Role = Literal["guest", "free", "pro"]
 
 def _now_rfc3339() -> str:
@@ -27,6 +30,7 @@ def run_analysis_v1(
     config: Optional[EngineConfig] = None,
     analysis_id: Optional[str] = None,
     _test_overrides: Optional[Dict[str, Any]] = None,
+    input_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Engine v1 contract-first runner.
@@ -43,18 +47,31 @@ def run_analysis_v1(
     """
 
     # --- Normalize positional style ---
-    if audio is None and track is None and audio_or_track is not None:
-        audio = audio_or_track
+    if audio is None and track is None and audio_or_track is not None and input_path is None:
+        # If caller passed a path-like, treat it as input_path (not audio).
+        if isinstance(audio_or_track, (str, Path)):
+            input_path = str(audio_or_track)
+        else:
+            audio = audio_or_track
 
-    if role is None:
-        raise TypeError("run_analysis_v1 requires role (e.g. 'guest'|'free'|'pro')")
-
-    # --- Validate exactly one input source ---
-    if (track is None and audio is None) or (track is not None and audio is not None):
-        raise TypeError("run_analysis_v1 requires exactly one of: track=... or audio=...")
+    # --- Validate exactly one input source (track, audio, input_path) ---
+    provided = [track is not None, audio is not None, input_path is not None]
+    if sum(provided) != 1:
+        raise TypeError("run_analysis_v1 requires exactly one of: track=..., audio=..., input_path=...")
+    
+    # --- Normalize input_path -> audio (v1: WAV only via stdlib ingest) ---
+    if input_path is not None:
+        p = Path(input_path)
+        if p.suffix.lower() != ".wav":
+            raise ValueError("v1 input_path only supports .wav")
+        audio = decode_wav_v1(p)
+        input_path = None
 
     cfg = config or EngineConfig()
     aid = analysis_id or str(uuid4())
+
+    if input_path is not None:
+        audio = decode_wav_v1(Path(input_path))
 
     # If caller provided only audio, derive TrackInfo best-effort
     if track is None:
