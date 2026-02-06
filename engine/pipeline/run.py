@@ -8,6 +8,11 @@ from uuid import uuid4
 from engine.core.config import EngineConfig
 from engine.core.output import TrackInfo
 
+from engine.preprocess.preprocess_v1 import preprocess_v1
+from engine.features.types import FeatureContext
+from engine.features.bpm_v1 import extract_bpm_v1
+from engine.features.key_mode_v1 import extract_key_mode_v1
+
 Role = Literal["guest", "free", "pro"]
 
 def _now_rfc3339() -> str:
@@ -21,6 +26,7 @@ def run_analysis_v1(
     audio: Optional[Any] = None,
     config: Optional[EngineConfig] = None,
     analysis_id: Optional[str] = None,
+    _test_overrides: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Engine v1 contract-first runner.
@@ -38,7 +44,6 @@ def run_analysis_v1(
 
     # --- Normalize positional style ---
     if audio is None and track is None and audio_or_track is not None:
-        # Positional first argument is treated as audio unless caller also gave track/audio explicitly.
         audio = audio_or_track
 
     if role is None:
@@ -48,11 +53,11 @@ def run_analysis_v1(
     if (track is None and audio is None) or (track is not None and audio is not None):
         raise TypeError("run_analysis_v1 requires exactly one of: track=... or audio=...")
 
-    _ = config or EngineConfig()
+    cfg = config or EngineConfig()
     aid = analysis_id or str(uuid4())
 
+    # If caller provided only audio, derive TrackInfo best-effort
     if track is None:
-        # Best-effort extraction from decoded audio object
         fmt = getattr(audio, "format", "unknown")
         track = TrackInfo(
             duration_seconds=float(getattr(audio, "duration_seconds")),
@@ -60,6 +65,11 @@ def run_analysis_v1(
             sample_rate_hz=int(getattr(audio, "sample_rate_hz")),
             channels=int(getattr(audio, "channels")),
         )
+
+    # Preprocess only if we have audio (track-only path has no audio payload)
+    pre = None
+    if audio is not None:
+        pre = preprocess_v1(audio, config=cfg)
 
     out: Dict[str, Any] = {
         "engine": {"name": "bnk-analysis-engine", "version": "v1"},
@@ -70,6 +80,7 @@ def run_analysis_v1(
         "metrics": {},
         "warnings": [],
     }
+    metrics: Dict[str, Any] = out["metrics"]
 
     # Events gating per spec: guest gets {} (or omit). We'll keep {} for stability.
     if role == "guest":
@@ -81,5 +92,40 @@ def run_analysis_v1(
             "tonality": {"tonal_drift_ranges": []},
             "noise": {"noise_change_ranges": []},
         }
+
+    # Feature extraction only if we actually have preprocessed audio
+    if pre is not None:
+        ctx = FeatureContext(
+            audio=pre,
+            has_rhythm_evidence=True,
+            has_tonal_evidence=True,
+            bpm_hint_exact=None,
+            key_mode_hint=None,
+        )
+
+        # --- test overrides (3.5) ---
+        if _test_overrides:
+            ctx = FeatureContext(
+                audio=ctx.audio,
+                has_rhythm_evidence=_test_overrides.get("has_rhythm_evidence", ctx.has_rhythm_evidence),
+                has_tonal_evidence=_test_overrides.get("has_tonal_evidence", ctx.has_tonal_evidence),
+                bpm_hint_exact=_test_overrides.get("bpm_hint_exact", ctx.bpm_hint_exact),
+                key_mode_hint=_test_overrides.get("key_mode_hint", ctx.key_mode_hint),
+            )
+
+        bpm_block = extract_bpm_v1(ctx, config=cfg)
+        key_mode_block = extract_key_mode_v1(ctx, config=cfg)
+
+        # Guest: do not expose value_exact
+        if role == "guest" and bpm_block is not None:
+            bpm_block = dict(bpm_block)
+            bpm_val = dict(bpm_block.get("value", {}))
+            bpm_val.pop("value_exact", None)
+            bpm_block["value"] = bpm_val
+
+        if bpm_block is not None:
+            metrics["bpm"] = bpm_block
+        if key_mode_block is not None:
+            metrics["key_mode"] = key_mode_block
 
     return out
