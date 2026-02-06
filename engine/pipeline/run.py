@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any, Dict, Literal, Optional
@@ -9,6 +10,7 @@ from engine.core.config import EngineConfig
 from engine.core.errors import EngineError
 from engine.core.output import TrackInfo
 
+from engine.contracts.analysis_output import validate_analysis_output_v1
 from engine.preprocess.preprocess_v1 import preprocess_v1
 from engine.features.types import FeatureContext
 from engine.features.bpm_v1 import extract_bpm_v1
@@ -23,6 +25,17 @@ from engine.ingest.ingest_v1 import decode_input_path_v1
 
 Role = Literal["guest", "free", "pro"]
 
+_ASSERT_CONTRACT_ENV = "BNK_ENGINE_ASSERT_CONTRACT"
+_ASSERT_CONTRACT_TRUTHY = {"1", "true", "TRUE", "yes", "YES"}
+
+
+def _env_assert_contract_enabled() -> bool:
+    v = os.getenv(_ASSERT_CONTRACT_ENV)
+    if v is None:
+        return False
+    return v in _ASSERT_CONTRACT_TRUTHY
+
+
 def _now_rfc3339() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -36,6 +49,7 @@ def run_analysis_v1(
     analysis_id: Optional[str] = None,
     _test_overrides: Optional[Dict[str, Any]] = None,
     input_path: Optional[str] = None,
+    assert_contract: bool = False,
 ) -> Dict[str, Any]:
     """
     Engine v1 contract-first runner.
@@ -49,6 +63,12 @@ def run_analysis_v1(
          run_analysis_v1(decoded_audio, "guest", config=...)
 
     Exactly one of (track, audio) must be provided after normalization.
+
+    Contract assertion:
+      - If assert_contract=True, the final packaged output is validated against
+        the Engine v1 contract right before returning.
+      - If assert_contract=False, contract assertion can still be enabled by
+        setting BNK_ENGINE_ASSERT_CONTRACT to one of: 1, true, TRUE, yes, YES.
     """
     current_stage = "validate"
     aid: Optional[str] = None
@@ -193,6 +213,13 @@ def run_analysis_v1(
         # Final v1 packaging step (role gating).
         current_stage = "packaging"
         packaged = package_output_v1(out, role=role)
+
+        # Optional contract assertion (tests/debug); keep off by default.
+        if assert_contract or _env_assert_contract_enabled():
+            current_stage = "contract"
+            validate_analysis_output_v1(packaged)
+            current_stage = "packaging"
+
         hooks.emit(
             "analysis_completed",
             analysis_id=aid,
