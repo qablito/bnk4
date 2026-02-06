@@ -1,0 +1,39 @@
+# OS / Editor
+.DS_Store
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+.env
+.env.*
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / Frontend (si aplica)
+node_modules/
+.next/
+dist/
+build/
+
+# Logs
+*.log
+
+# Audio / Large artifacts (ajusta si quieres versionar fixtures)
+*.wav
+*.mp3
+*.flac
+*.aiff
+*.m4a
+*.ogg
+*.zip
+*.pdf
+
+# Local dev / Supabase
+.supabase/

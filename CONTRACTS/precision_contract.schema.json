@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BeetsNKeys Precision Contract",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "value": {
+      "description": "Primary value when confidence is high.",
+      "type": ["string", "number", "boolean", "object", "array", "null"]
+    },
+    "confidence": {
+      "description": "Confidence in range [0.0, 1.0].",
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "candidates": {
+      "description": "Candidate values when confidence is below threshold.",
+      "type": "array",
+      "items": {}
+    },
+    "method": {
+      "description": "Algorithm or heuristic used to compute the metric.",
+      "type": "string",
+      "minLength": 1
+    },
+    "limits": {
+      "description": "When the metric is not reliable.",
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": ["confidence", "method", "limits"],
+  "if": {
+    "properties": {
+      "confidence": {"type": "number", "maximum": 0.69}
+    },
+    "required": ["confidence"]
+  },
+  "then": {
+    "required": ["candidates"]
+  }
+}
