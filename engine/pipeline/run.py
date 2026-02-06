@@ -56,6 +56,13 @@ def run_analysis_v1(
         if role is None:
             raise EngineError(code="INVALID_INPUT", message="role is required")
 
+        if input_path is not None and not isinstance(input_path, (str, Path)):
+            raise EngineError(
+                code="INVALID_INPUT",
+                message="Invalid input_path",
+                context={"stage": current_stage},
+            )
+
         # --- Normalize positional style ---
         if audio is None and track is None and audio_or_track is not None and input_path is None:
             # If caller passed a path-like, treat it as input_path (not audio).
@@ -87,18 +94,33 @@ def run_analysis_v1(
 
         # --- Normalize input_path -> audio (v1: WAV only via stdlib ingest) ---
         if input_path is not None:
-            audio = decode_input_path_v1(Path(input_path))
+            try:
+                p = Path(input_path)
+            except (TypeError, ValueError) as exc:
+                raise EngineError(
+                    code="INVALID_INPUT",
+                    message="Invalid input_path",
+                    context={"stage": current_stage},
+                ) from exc
+            audio = decode_input_path_v1(p)
             input_path = None
 
         # If caller provided only audio, derive TrackInfo best-effort
         if track is None:
-            fmt = getattr(audio, "format", "unknown")
-            track = TrackInfo(
-                duration_seconds=float(getattr(audio, "duration_seconds")),
-                format=str(fmt) if fmt else "unknown",
-                sample_rate_hz=int(getattr(audio, "sample_rate_hz")),
-                channels=int(getattr(audio, "channels")),
-            )
+            try:
+                fmt = getattr(audio, "format", "unknown")
+                track = TrackInfo(
+                    duration_seconds=float(getattr(audio, "duration_seconds")),
+                    format=str(fmt) if fmt else "unknown",
+                    sample_rate_hz=int(getattr(audio, "sample_rate_hz")),
+                    channels=int(getattr(audio, "channels")),
+                )
+            except (AttributeError, TypeError, ValueError) as exc:
+                raise EngineError(
+                    code="INVALID_INPUT",
+                    message="Invalid audio input",
+                    context={"stage": current_stage},
+                ) from exc
 
         # Preprocess only if we have audio (track-only path has no audio payload)
         pre = None
@@ -106,7 +128,7 @@ def run_analysis_v1(
             try:
                 current_stage = "preprocess"
                 pre = preprocess_v1(audio, config=cfg)
-            except ValueError as exc:
+            except (TypeError, ValueError) as exc:
                 raise EngineError(code="INVALID_INPUT", message="Invalid input", context={"stage": "preprocess_v1"}) from exc
 
         out: Dict[str, Any] = {
@@ -190,7 +212,7 @@ def run_analysis_v1(
         )
         raise
     except Exception as exc:
-        err = EngineError(code="INTERNAL_ERROR", message="Internal error", context={"stage": "run_analysis_v1"})
+        err = EngineError(code="INTERNAL_ERROR", message="Internal error", context={"stage": current_stage, "hint": "unexpected_exception"})
         hooks.emit(
             "analysis_failed",
             analysis_id=aid,
