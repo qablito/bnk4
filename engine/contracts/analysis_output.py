@@ -3,9 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
+from engine.core.errors import EngineError
 
-class ContractViolation(ValueError):
+class ContractViolation(EngineError):
     """Raised when an analysis output violates the Engine v1 contract."""
+
+    def __init__(self, message: str, *, path: Optional[str] = None):
+        ctx = {"path": path} if path else None
+        super().__init__(code="CONTRACT_VIOLATION", message=message, context=ctx)
 
 
 @dataclass(frozen=True)
@@ -31,6 +36,9 @@ LOCKED_FORBIDDEN_KEYS = {
     "scores",
 }
 
+# v1 locked blocks are value-less; only unlock_hint and an optional non-empty preview are allowed.
+LOCKED_ALLOWED_KEYS = {"locked", "unlock_hint", "preview"}
+
 
 def _is_uuid_like(v: str) -> bool:
     # Lightweight check; no uuid import to keep it tiny and permissive.
@@ -44,7 +52,7 @@ def _is_uuid_like(v: str) -> bool:
 
 
 def _err(path: str, msg: str) -> ContractViolation:
-    return ContractViolation(f"{path}: {msg}")
+    return ContractViolation(f"{path}: {msg}", path=path)
 
 
 def validate_analysis_output_v1(obj: Dict[str, Any], *, opts: Optional[ValidateOptions] = None) -> None:
@@ -121,6 +129,10 @@ def validate_analysis_output_v1(obj: Dict[str, Any], *, opts: Optional[ValidateO
             if "unlock_hint" not in mval or not isinstance(mval["unlock_hint"], str) or not mval["unlock_hint"].strip():
                 raise _err(path + ".unlock_hint", "locked metrics must include non-empty unlock_hint")
 
+            extra_keys = set(mval.keys()) - LOCKED_ALLOWED_KEYS
+            if extra_keys:
+                raise _err(path, f"locked metric must not include: {', '.join(sorted(extra_keys))}")
+
             # Forbidden keys in any locked block
             present_forbidden = LOCKED_FORBIDDEN_KEYS.intersection(mval.keys())
             if present_forbidden:
@@ -149,6 +161,10 @@ def validate_analysis_output_v1(obj: Dict[str, Any], *, opts: Optional[ValidateO
                 # Guest must not receive numeric confidence except where explicitly allowed (we choose strict: none).
                 if "confidence" in mval:
                     raise _err(path + ".confidence", "guest must not receive numeric confidence in v1")
+                if mname == "bpm":
+                    val = mval.get("value")
+                    if isinstance(val, dict) and "value_exact" in val:
+                        raise _err(path + ".value.value_exact", "guest bpm must not include value_exact")
                 # Guest candidates: only allowed on bpm/key_mode and only rank/value.
                 if "candidates" in mval:
                     if mname not in ("bpm", "key_mode"):
