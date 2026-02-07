@@ -4,6 +4,47 @@ from typing import Any, Literal
 
 Role = Literal["guest", "free", "pro"]
 
+GUEST_STRIP_KEYS_DEEP = {
+    "confidence",
+    "evidence",
+    "reason_codes",
+    "ambiguity",
+    "ambiguity_label",
+    "score",
+    "scores",
+}
+
+
+def _deep_strip_keys(obj: Any, *, strip_keys: set[str]) -> Any:
+    """
+    Recursively removes any dict keys that match strip_keys.
+    Works on dict/list trees; returns a new object only when needed.
+    """
+    if isinstance(obj, dict):
+        changed = False
+        out: dict[str, Any] = {}
+        for k, v in obj.items():
+            if k in strip_keys:
+                changed = True
+                continue
+            nv = _deep_strip_keys(v, strip_keys=strip_keys)
+            if nv is not v:
+                changed = True
+            out[k] = nv
+        return out if changed else obj
+
+    if isinstance(obj, list):
+        changed = False
+        out_list: list[Any] = []
+        for v in obj:
+            nv = _deep_strip_keys(v, strip_keys=strip_keys)
+            if nv is not v:
+                changed = True
+            out_list.append(nv)
+        return out_list if changed else obj
+
+    return obj
+
 
 def package_output_v1(out: dict[str, Any], *, role: Role) -> dict[str, Any]:
     """
@@ -70,14 +111,11 @@ def _package_metrics(out: dict[str, Any], *, role: Role) -> None:
     new_metrics: dict[str, Any] = dict(metrics)
     changed = False
 
-    # Guest: strip numeric confidence from any metric block (defense in depth).
     if role == "guest":
-        for mname, mval in list(new_metrics.items()):
-            if isinstance(mval, dict) and "confidence" in mval:
-                nm = dict(mval)
-                nm.pop("confidence", None)
-                new_metrics[mname] = nm
-                changed = True
+        stripped = _deep_strip_keys(new_metrics, strip_keys=GUEST_STRIP_KEYS_DEEP)
+        if stripped is not new_metrics:
+            new_metrics = stripped
+            changed = True
 
     # Rule: Guest must not receive bpm.value.value_exact.
     if role == "guest" and "bpm" in new_metrics and isinstance(new_metrics["bpm"], dict):
