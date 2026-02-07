@@ -207,12 +207,18 @@ def run_analysis_v1(
             current_stage = "feature:key_mode"
             key_mode_block = extract_key_mode_v1(ctx, config=cfg)
 
-            # Guest: do not expose value_exact
+            # Guest: must not expose numeric confidence; must not expose value_exact
             if role == "guest" and bpm_block is not None:
                 bpm_block = dict(bpm_block)
                 bpm_val = dict(bpm_block.get("value", {}))
                 bpm_val.pop("value_exact", None)
                 bpm_block["value"] = bpm_val
+                bpm_block.pop("confidence", None)
+
+            # Guest: must not expose numeric confidence
+            if role == "guest" and key_mode_block is not None:
+                key_mode_block = dict(key_mode_block)
+                key_mode_block.pop("confidence", None)
 
             if bpm_block is not None:
                 metrics["bpm"] = bpm_block
