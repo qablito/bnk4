@@ -10,6 +10,7 @@ GUEST_STRIP_KEYS_DEEP = {
     "reason_codes",
     "ambiguity",
     "ambiguity_label",
+    "relation",
     "score",
     "scores",
 }

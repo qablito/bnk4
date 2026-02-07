@@ -185,7 +185,9 @@ def run_analysis_v1(
                 has_rhythm_evidence=True,
                 has_tonal_evidence=True,
                 bpm_hint_exact=None,
+                bpm_hint_windows=None,
                 key_mode_hint=None,
+                key_mode_hint_windows=None,
             )
 
             # --- test overrides (3.5) ---
@@ -199,7 +201,11 @@ def run_analysis_v1(
                         "has_tonal_evidence", ctx.has_tonal_evidence
                     ),
                     bpm_hint_exact=_test_overrides.get("bpm_hint_exact", ctx.bpm_hint_exact),
+                    bpm_hint_windows=_test_overrides.get("bpm_hint_windows", ctx.bpm_hint_windows),
                     key_mode_hint=_test_overrides.get("key_mode_hint", ctx.key_mode_hint),
+                    key_mode_hint_windows=_test_overrides.get(
+                        "key_mode_hint_windows", ctx.key_mode_hint_windows
+                    ),
                 )
 
             current_stage = "feature:bpm"

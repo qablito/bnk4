@@ -19,4 +19,8 @@ class FeatureContext:
 
     # Optional “hints” to make deterministic tests possible
     bpm_hint_exact: float | None = None
+    # Window-level tempo hints (for candidate + stability tests). Values are in BPM.
+    bpm_hint_windows: list[float] | None = None
     key_mode_hint: str | None = None  # e.g. "F# minor"
+    # Window-level key/mode hints (for candidate + stability tests). Values are like "F# minor".
+    key_mode_hint_windows: list[str] | None = None
