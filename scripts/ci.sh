@@ -7,3 +7,6 @@ export BNK_ENGINE_ASSERT_CONTRACT=1
 ./scripts/lint.sh
 python -m build
 python -m twine check dist/*
+
+git diff --exit-code
+git diff --cached --exit-code
