@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import re
-import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -9,7 +8,9 @@ TARGET = ROOT / "THREAT_MODEL.md"
 BANNED = [
     {
         "name": "fingerprint_hash_pop",
-        "pattern": re.compile(r"fingerprint[-\s]*hash|fingerprint[-\s]*based|fingerprint.*pop|pop.*fingerprint", re.I),
+        "pattern": re.compile(
+            r"fingerprint[-\s]*hash|fingerprint[-\s]*based|fingerprint.*pop|pop.*fingerprint", re.I
+        ),
         "allow_negation": True,
         "negation_strength": "strong_only",
     },
@@ -20,7 +21,10 @@ BANNED = [
     },
     {
         "name": "ownership_device_id",
-        "pattern": re.compile(r"auth\.jwt\(\)\s*->>?\s*'device_id'|\bdevice_id\b.*\bownership\b|\bownership\b.*\bdevice_id\b", re.I),
+        "pattern": re.compile(
+            r"auth\.jwt\(\)\s*->>?\s*'device_id'|\bdevice_id\b.*\bownership\b|\bownership\b.*\bdevice_id\b",
+            re.I,
+        ),
         "allow_negation": False,
     },
     {
@@ -34,7 +38,10 @@ BANNED = [
     },
     {
         "name": "permissive_rls_without_ownership",
-        "pattern": re.compile(r"permissive.*qual\s+is\s+null|qual\s+is\s+null.*permissive|permissive.*\btrue\b|\bqual\s*=\s*true\b", re.I),
+        "pattern": re.compile(
+            r"permissive.*qual\s+is\s+null|qual\s+is\s+null.*permissive|permissive.*\btrue\b|\bqual\s*=\s*true\b",
+            re.I,
+        ),
         "allow_negation": True,
         "negation_strength": "strong_only",
     },
@@ -96,7 +103,10 @@ def main() -> int:
                 if LEGACY_HINT.search(line):
                     continue
 
-            if rule["name"] in ("test_prefix", "tests_de_alto_impacto") and is_pure_security_spec_reference(raw):
+            if rule["name"] in (
+                "test_prefix",
+                "tests_de_alto_impacto",
+            ) and is_pure_security_spec_reference(raw):
                 continue
 
             if rule.get("allow_negation", True):
