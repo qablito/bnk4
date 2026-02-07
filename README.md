@@ -27,3 +27,8 @@ python -m twine check dist/*
 
 Note: Engine v1 intentionally avoids heavy audio dependencies (no numpy/librosa/etc).
 
+## macOS dev setup (pyenv)
+
+```sh
+brew install pyenv
+# add pyenv init to ~/.zshrc and ~/.zprofile (login shells)
