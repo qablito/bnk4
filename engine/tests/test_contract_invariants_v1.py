@@ -21,31 +21,41 @@ def _base_output(*, role: str, metrics: dict) -> dict:
 
 
 def test_locked_metric_contains_confidence_fails():
-    out = _base_output(role="free", metrics={"grid": {"locked": True, "unlock_hint": "x", "confidence": 0.1}})
+    out = _base_output(
+        role="free", metrics={"grid": {"locked": True, "unlock_hint": "x", "confidence": 0.1}}
+    )
     with pytest.raises(ContractViolation):
         validate_analysis_output_v1(out)
 
 
 def test_locked_metric_contains_candidates_fails():
-    out = _base_output(role="free", metrics={"grid": {"locked": True, "unlock_hint": "x", "candidates": []}})
+    out = _base_output(
+        role="free", metrics={"grid": {"locked": True, "unlock_hint": "x", "candidates": []}}
+    )
     with pytest.raises(ContractViolation):
         validate_analysis_output_v1(out)
 
 
 def test_locked_metric_contains_evidence_fails():
-    out = _base_output(role="free", metrics={"grid": {"locked": True, "unlock_hint": "x", "evidence": {"k": 1}}})
+    out = _base_output(
+        role="free", metrics={"grid": {"locked": True, "unlock_hint": "x", "evidence": {"k": 1}}}
+    )
     with pytest.raises(ContractViolation):
         validate_analysis_output_v1(out)
 
 
 def test_locked_metric_contains_value_fails():
-    out = _base_output(role="free", metrics={"grid": {"locked": True, "unlock_hint": "x", "value": {"a": 1}}})
+    out = _base_output(
+        role="free", metrics={"grid": {"locked": True, "unlock_hint": "x", "value": {"a": 1}}}
+    )
     with pytest.raises(ContractViolation):
         validate_analysis_output_v1(out)
 
 
 def test_locked_metric_preview_empty_fails():
-    out = _base_output(role="free", metrics={"grid": {"locked": True, "unlock_hint": "x", "preview": {}}})
+    out = _base_output(
+        role="free", metrics={"grid": {"locked": True, "unlock_hint": "x", "preview": {}}}
+    )
     with pytest.raises(ContractViolation):
         validate_analysis_output_v1(out)
 
@@ -69,4 +79,3 @@ def test_guest_bpm_value_exact_fails():
 def test_guest_smoke_valid_events_empty_and_bpm_no_value_exact_passes():
     out = _base_output(role="guest", metrics={"bpm": {"value": {"value_rounded": 70}}})
     validate_analysis_output_v1(out)
-

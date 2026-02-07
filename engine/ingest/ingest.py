@@ -2,15 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Union
 
-from engine.ingest.types import DecodedAudio, AudioFormat
+from engine.ingest.types import AudioFormat, DecodedAudio
 
 
 @dataclass(frozen=True)
 class IngestLimits:
     max_bytes: int
-    max_duration_seconds: Optional[float] = None
+    max_duration_seconds: float | None = None
 
 
 def _guess_format_from_suffix(path: Path) -> AudioFormat:
@@ -21,7 +20,7 @@ def _guess_format_from_suffix(path: Path) -> AudioFormat:
 
 
 def ingest_v1(
-    source: Union[bytes, str, Path],
+    source: bytes | str | Path,
     *,
     limits: IngestLimits,
 ) -> DecodedAudio:

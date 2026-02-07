@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Literal
 
 ErrorCode = Literal[
     "INVALID_INPUT",
@@ -19,13 +19,12 @@ class EngineError(Exception):
     - context: optional structured metadata (must be safe to log)
     """
 
-    def __init__(self, *, code: ErrorCode, message: str, context: Optional[Dict[str, Any]] = None):
+    def __init__(self, *, code: ErrorCode, message: str, context: dict[str, Any] | None = None):
         super().__init__(message)
         self.code: str = str(code)
         self.message: str = str(message)
-        self.context: Optional[Dict[str, Any]] = context or None
+        self.context: dict[str, Any] | None = context or None
 
 
 def raise_engine_error(code: ErrorCode, message: str, **context: Any) -> None:
     raise EngineError(code=code, message=message, context=context or None)
-

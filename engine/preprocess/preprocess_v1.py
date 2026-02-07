@@ -7,7 +7,6 @@ from typing import Literal
 from engine.core.config import EngineConfig
 from engine.ingest.types import DecodedAudio
 
-
 ChannelLayout = Literal["mono", "stereo"]
 
 
@@ -17,6 +16,7 @@ class PreprocessedAudio:
     v1 stub: no PCM is stored. This carries only validated/canonical metadata and
     prepares the pipeline for real preprocessing in a later step.
     """
+
     internal_sample_rate_hz: int
     channels: int
     duration_seconds: float

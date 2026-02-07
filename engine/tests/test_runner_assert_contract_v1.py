@@ -1,20 +1,20 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import pytest
 
+from engine.contracts.analysis_output import ContractViolation
 from engine.core.config import EngineConfig
 from engine.core.errors import EngineError
 from engine.core.output import TrackInfo
-from engine.contracts.analysis_output import ContractViolation
 from engine.observability import hooks
 from engine.pipeline import run as run_mod
 from engine.pipeline.run import run_analysis_v1
 
 
-def _capture_emit(monkeypatch) -> List[Tuple[str, Dict[str, Any]]]:
-    events: List[Tuple[str, Dict[str, Any]]] = []
+def _capture_emit(monkeypatch) -> list[tuple[str, dict[str, Any]]]:
+    events: list[tuple[str, dict[str, Any]]] = []
 
     def capture(event: str, **payload: Any) -> None:
         events.append((event, payload))
@@ -82,4 +82,3 @@ def test_assert_contract_env_var_enables_validation(monkeypatch):
     )
     assert out["role"] == "guest"
     assert called["n"] == 1
-

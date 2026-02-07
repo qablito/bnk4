@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from engine.core.config import EngineConfig
 from engine.ingest.types import DecodedAudio
-from engine.pipeline.run import run_analysis_v1
 from engine.packaging.package_output_v1 import package_output_v1
+from engine.pipeline.run import run_analysis_v1
 
 
 def test_guest_events_empty_and_bpm_exact_removed():
@@ -44,4 +44,3 @@ def test_locked_preview_empty_is_omitted():
     }
     packaged = package_output_v1(synthetic, role="free")
     assert "preview" not in packaged["metrics"]["grid"]
-

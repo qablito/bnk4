@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import pytest
 
+from engine.contracts.analysis_output import validate_analysis_output_v1
 from engine.core.config import EngineConfig
 from engine.core.errors import EngineError
 from engine.core.output import TrackInfo
 from engine.ingest.types import DecodedAudio
 from engine.pipeline.run import run_analysis_v1
-from engine.contracts.analysis_output import validate_analysis_output_v1
 
 
 def test_unsupported_extension_on_input_path_raises_engine_error(tmp_path):
@@ -35,4 +35,3 @@ def test_contract_violation_raises_contract_violation_code():
         validate_analysis_output_v1({})
 
     assert excinfo.value.code == "CONTRACT_VIOLATION"
-

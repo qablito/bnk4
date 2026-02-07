@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import wave
 from pathlib import Path
-from typing import Optional
 
 from engine.ingest.types import DecodedAudio
 
 
-def decode_wav_v1(path: str | Path, *, max_seconds: Optional[float] = None) -> DecodedAudio:
+def decode_wav_v1(path: str | Path, *, max_seconds: float | None = None) -> DecodedAudio:
     """
     Decode WAV metadata using stdlib `wave` (v1: metadata-only).
 
@@ -43,7 +42,9 @@ def decode_wav_v1(path: str | Path, *, max_seconds: Optional[float] = None) -> D
 
             # Optional limiter (ingest safeguard)
             if max_seconds is not None and duration > max_seconds:
-                raise ValueError(f"WAV duration exceeds max_seconds ({duration:.3f}s > {max_seconds:.3f}s)")
+                raise ValueError(
+                    f"WAV duration exceeds max_seconds ({duration:.3f}s > {max_seconds:.3f}s)"
+                )
 
             return DecodedAudio(
                 sample_rate_hz=sample_rate,

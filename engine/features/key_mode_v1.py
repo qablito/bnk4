@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from engine.core.config import EngineConfig
 from engine.features.types import FeatureContext
 from engine.observability import hooks
 
 
-def extract_key_mode_v1(ctx: FeatureContext, *, config: EngineConfig) -> Optional[Dict[str, Any]]:
+def extract_key_mode_v1(ctx: FeatureContext, *, config: EngineConfig) -> dict[str, Any] | None:
     """
     Returns the unlocked key_mode metric block (Precision Contract shape) or None (omit).
     v1 stubs:
@@ -22,7 +22,12 @@ def extract_key_mode_v1(ctx: FeatureContext, *, config: EngineConfig) -> Optiona
     if ctx.key_mode_hint is None:
         confidence = 0.3
         if confidence < config.tunables.key_mode_min_confidence_omit:
-            hooks.emit("feature_omitted", feature="key_mode", reason="confidence_below_threshold", stage="feature:key_mode")
+            hooks.emit(
+                "feature_omitted",
+                feature="key_mode",
+                reason="confidence_below_threshold",
+                stage="feature:key_mode",
+            )
             return None
         value = "C major"
     else:
@@ -30,7 +35,12 @@ def extract_key_mode_v1(ctx: FeatureContext, *, config: EngineConfig) -> Optiona
         confidence = 0.8
 
     if confidence < config.tunables.key_mode_min_confidence_omit:
-        hooks.emit("feature_omitted", feature="key_mode", reason="confidence_below_threshold", stage="feature:key_mode")
+        hooks.emit(
+            "feature_omitted",
+            feature="key_mode",
+            reason="confidence_below_threshold",
+            stage="feature:key_mode",
+        )
         return None
 
     # minimal candidates: top-2

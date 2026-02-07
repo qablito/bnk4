@@ -7,16 +7,22 @@ References:
 - Canonical output contract: `CONTRACTS/analysis_output.md`
 - Security invariants + normalized error model: `SECURITY_SPEC.md`
 
-## Development
+## Tooling
 
-Editable install:
+Bootstrap a local venv and run tests:
 ```sh
-python -m pip install -e ".[dev]" --no-build-isolation
+./scripts/bootstrap_dev.sh
+source .venv/bin/activate
 ```
 
-Run tests:
+Format:
 ```sh
-python -m pytest -q
+./scripts/fmt.sh
+```
+
+Lint + tests:
+```sh
+./scripts/lint.sh
 ```
 
 Build artifacts:
@@ -26,9 +32,3 @@ python -m twine check dist/*
 ```
 
 Note: Engine v1 intentionally avoids heavy audio dependencies (no numpy/librosa/etc).
-
-## macOS dev setup (pyenv)
-
-```sh
-brew install pyenv
-# add pyenv init to ~/.zshrc and ~/.zprofile (login shells)

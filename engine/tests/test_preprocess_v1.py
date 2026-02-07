@@ -1,3 +1,5 @@
+import pytest
+
 from engine.core.config import EngineConfig
 from engine.ingest.types import DecodedAudio
 from engine.preprocess.preprocess_v1 import preprocess_v1
@@ -17,8 +19,5 @@ def test_preprocess_v1_sets_layout_and_internal_sr():
 def test_preprocess_v1_rejects_invalid_channels():
     cfg = EngineConfig()
     audio = DecodedAudio(sample_rate_hz=44100, channels=3, duration_seconds=10.0)
-    try:
+    with pytest.raises(ValueError):
         preprocess_v1(audio, config=cfg)
-        assert False, "expected ValueError"
-    except ValueError:
-        pass

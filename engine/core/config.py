@@ -43,6 +43,7 @@ def clamp01(x: float) -> float:
         return 1.0
     return x
 
+
 @dataclass(frozen=True)
 class EngineConfig:
     """
@@ -50,4 +51,5 @@ class EngineConfig:
 
     We keep a stable name (`EngineConfig`) because pipeline/tests import it.
     """
+
     tunables: EngineV1Tunables = field(default_factory=lambda: DEFAULT_TUNABLES_V1)

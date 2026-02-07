@@ -3,14 +3,18 @@ from __future__ import annotations
 import wave
 from pathlib import Path
 
+import pytest
+
 from engine.ingest.decode_wav_v1 import decode_wav_v1
 
 
-def _write_silence_wav(path: Path, *, sr: int = 44100, channels: int = 2, seconds: float = 1.0) -> None:
+def _write_silence_wav(
+    path: Path, *, sr: int = 44100, channels: int = 2, seconds: float = 1.0
+) -> None:
     nframes = int(sr * seconds)
     # 16-bit PCM silence
     sampwidth = 2
-    silence_frame = (b"\x00\x00" * channels)
+    silence_frame = b"\x00\x00" * channels
     data = silence_frame * nframes
 
     with wave.open(str(path), "wb") as wf:
@@ -35,8 +39,7 @@ def test_decode_wav_v1_enforces_max_seconds(tmp_path: Path):
     wav_path = tmp_path / "silence.wav"
     _write_silence_wav(wav_path, sr=44100, channels=1, seconds=1.0)
 
-    try:
+    with pytest.raises(ValueError) as excinfo:
         decode_wav_v1(wav_path, max_seconds=0.5)
-        assert False, "expected ValueError"
-    except ValueError as exc:
-        assert "max_seconds" in str(exc)
+
+    assert "max_seconds" in str(excinfo.value)

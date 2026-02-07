@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any, Dict, Literal, Optional
+from datetime import UTC, datetime
+from typing import Any, Literal
 from uuid import uuid4
 
 Role = Literal["guest", "free", "pro"]
+
 
 @dataclass(frozen=True)
 class TrackInfo:
@@ -14,19 +15,21 @@ class TrackInfo:
     sample_rate_hz: int
     channels: int
 
+
 def now_rfc3339() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
 
 def canonical_output(
     *,
     role: Role,
     track: TrackInfo,
-    analysis_id: Optional[str] = None,
-    created_at: Optional[str] = None,
-    metrics: Optional[Dict[str, Any]] = None,
-    events: Optional[Dict[str, Any]] = None,
-    warnings: Optional[list] = None,
-) -> Dict[str, Any]:
+    analysis_id: str | None = None,
+    created_at: str | None = None,
+    metrics: dict[str, Any] | None = None,
+    events: dict[str, Any] | None = None,
+    warnings: list | None = None,
+) -> dict[str, Any]:
     """
     Canonical analysis output object per ANALYSIS_ENGINE_V1.md / CONTRACTS/analysis_output.md.
 
@@ -34,7 +37,7 @@ def canonical_output(
     - Guest MUST receive events: {} (or omit; we choose {} for stability).
     - Non-guest may include categorized events object (caller responsibility for shape).
     """
-    out: Dict[str, Any] = {
+    out: dict[str, Any] = {
         "engine": {"name": "bnk-analysis-engine", "version": "v1"},
         "analysis_id": analysis_id or str(uuid4()),
         "created_at": created_at or now_rfc3339(),

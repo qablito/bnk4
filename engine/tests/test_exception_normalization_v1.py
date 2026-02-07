@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import pytest
 
@@ -12,8 +12,8 @@ from engine.pipeline import run as run_mod
 from engine.pipeline.run import run_analysis_v1
 
 
-def _capture_emit(monkeypatch) -> List[Tuple[str, Dict[str, Any]]]:
-    events: List[Tuple[str, Dict[str, Any]]] = []
+def _capture_emit(monkeypatch) -> list[tuple[str, dict[str, Any]]]:
+    events: list[tuple[str, dict[str, Any]]] = []
 
     def capture(event: str, **payload: Any) -> None:
         events.append((event, payload))

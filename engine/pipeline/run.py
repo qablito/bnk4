@@ -2,26 +2,22 @@ from __future__ import annotations
 
 import os
 from dataclasses import asdict
-from datetime import datetime, timezone
-from typing import Any, Dict, Literal, Optional
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, Literal
 from uuid import uuid4
 
+from engine.contracts.analysis_output import validate_analysis_output_v1
 from engine.core.config import EngineConfig
 from engine.core.errors import EngineError
 from engine.core.output import TrackInfo
-
-from engine.contracts.analysis_output import validate_analysis_output_v1
-from engine.preprocess.preprocess_v1 import preprocess_v1
-from engine.features.types import FeatureContext
 from engine.features.bpm_v1 import extract_bpm_v1
 from engine.features.key_mode_v1 import extract_key_mode_v1
-
-from engine.packaging.package_output_v1 import package_output_v1
-
-from engine.observability import hooks
-
-from pathlib import Path
+from engine.features.types import FeatureContext
 from engine.ingest.ingest_v1 import decode_input_path_v1
+from engine.observability import hooks
+from engine.packaging.package_output_v1 import package_output_v1
+from engine.preprocess.preprocess_v1 import preprocess_v1
 
 Role = Literal["guest", "free", "pro"]
 
@@ -37,20 +33,21 @@ def _env_assert_contract_enabled() -> bool:
 
 
 def _now_rfc3339() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
 
 def run_analysis_v1(
-    audio_or_track: Optional[Any] = None,
-    role: Optional[Role] = None,
+    audio_or_track: Any | None = None,
+    role: Role | None = None,
     *,
-    track: Optional[TrackInfo] = None,
-    audio: Optional[Any] = None,
-    config: Optional[EngineConfig] = None,
-    analysis_id: Optional[str] = None,
-    _test_overrides: Optional[Dict[str, Any]] = None,
-    input_path: Optional[str] = None,
+    track: TrackInfo | None = None,
+    audio: Any | None = None,
+    config: EngineConfig | None = None,
+    analysis_id: str | None = None,
+    _test_overrides: dict[str, Any] | None = None,
+    input_path: str | None = None,
     assert_contract: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Engine v1 contract-first runner.
 
@@ -71,7 +68,7 @@ def run_analysis_v1(
         setting BNK_ENGINE_ASSERT_CONTRACT to one of: 1, true, TRUE, yes, YES.
     """
     current_stage = "validate"
-    aid: Optional[str] = None
+    aid: str | None = None
     try:
         if role is None:
             raise EngineError(code="INVALID_INPUT", message="role is required")
@@ -97,7 +94,11 @@ def run_analysis_v1(
             raise EngineError(
                 code="INVALID_INPUT",
                 message="Exactly one input source is required",
-                context={"provided_track": track is not None, "provided_audio": audio is not None, "provided_input_path": input_path is not None},
+                context={
+                    "provided_track": track is not None,
+                    "provided_audio": audio is not None,
+                    "provided_input_path": input_path is not None,
+                },
             )
 
         cfg = config or EngineConfig()
@@ -130,10 +131,10 @@ def run_analysis_v1(
             try:
                 fmt = getattr(audio, "format", "unknown")
                 track = TrackInfo(
-                    duration_seconds=float(getattr(audio, "duration_seconds")),
+                    duration_seconds=float(audio.duration_seconds),
                     format=str(fmt) if fmt else "unknown",
-                    sample_rate_hz=int(getattr(audio, "sample_rate_hz")),
-                    channels=int(getattr(audio, "channels")),
+                    sample_rate_hz=int(audio.sample_rate_hz),
+                    channels=int(audio.channels),
                 )
             except (AttributeError, TypeError, ValueError) as exc:
                 raise EngineError(
@@ -149,9 +150,13 @@ def run_analysis_v1(
                 current_stage = "preprocess"
                 pre = preprocess_v1(audio, config=cfg)
             except (TypeError, ValueError) as exc:
-                raise EngineError(code="INVALID_INPUT", message="Invalid input", context={"stage": "preprocess_v1"}) from exc
+                raise EngineError(
+                    code="INVALID_INPUT",
+                    message="Invalid input",
+                    context={"stage": "preprocess_v1"},
+                ) from exc
 
-        out: Dict[str, Any] = {
+        out: dict[str, Any] = {
             "engine": {"name": "bnk-analysis-engine", "version": "v1"},
             "analysis_id": aid,
             "created_at": _now_rfc3339(),
@@ -160,7 +165,7 @@ def run_analysis_v1(
             "metrics": {},
             "warnings": [],
         }
-        metrics: Dict[str, Any] = out["metrics"]
+        metrics: dict[str, Any] = out["metrics"]
 
         # Events gating per spec: guest gets {} (or omit). We'll keep {} for stability.
         if role == "guest":
@@ -187,8 +192,12 @@ def run_analysis_v1(
             if _test_overrides:
                 ctx = FeatureContext(
                     audio=ctx.audio,
-                    has_rhythm_evidence=_test_overrides.get("has_rhythm_evidence", ctx.has_rhythm_evidence),
-                    has_tonal_evidence=_test_overrides.get("has_tonal_evidence", ctx.has_tonal_evidence),
+                    has_rhythm_evidence=_test_overrides.get(
+                        "has_rhythm_evidence", ctx.has_rhythm_evidence
+                    ),
+                    has_tonal_evidence=_test_overrides.get(
+                        "has_tonal_evidence", ctx.has_tonal_evidence
+                    ),
                     bpm_hint_exact=_test_overrides.get("bpm_hint_exact", ctx.bpm_hint_exact),
                     key_mode_hint=_test_overrides.get("key_mode_hint", ctx.key_mode_hint),
                 )
@@ -239,7 +248,11 @@ def run_analysis_v1(
         )
         raise
     except Exception as exc:
-        err = EngineError(code="INTERNAL_ERROR", message="Internal error", context={"stage": current_stage, "hint": "unexpected_exception"})
+        err = EngineError(
+            code="INTERNAL_ERROR",
+            message="Internal error",
+            context={"stage": current_stage, "hint": "unexpected_exception"},
+        )
         hooks.emit(
             "analysis_failed",
             analysis_id=aid,

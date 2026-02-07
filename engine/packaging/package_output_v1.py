@@ -1,18 +1,18 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Literal
+from typing import Any, Literal
 
 Role = Literal["guest", "free", "pro"]
 
 
-def package_output_v1(out: Dict[str, Any], *, role: Role) -> Dict[str, Any]:
+def package_output_v1(out: dict[str, Any], *, role: Role) -> dict[str, Any]:
     """
     Applies Engine v1 packaging rules that depend on caller role.
 
     This function is intentionally small and dependency-free. It is expected to be
     called as the final pipeline step (after metrics/events are computed).
     """
-    packaged: Dict[str, Any] = dict(out)
+    packaged: dict[str, Any] = dict(out)
 
     _package_events(packaged, role=role)
     _package_metrics(packaged, role=role)
@@ -20,7 +20,7 @@ def package_output_v1(out: Dict[str, Any], *, role: Role) -> Dict[str, Any]:
     return packaged
 
 
-def _package_events(out: Dict[str, Any], *, role: Role) -> None:
+def _package_events(out: dict[str, Any], *, role: Role) -> None:
     if role == "guest":
         out["events"] = {}
         return
@@ -32,7 +32,7 @@ def _package_events(out: Dict[str, Any], *, role: Role) -> None:
         events = {}
         out["events"] = events
 
-    def ensure_obj(key: str, default: Dict[str, Any]) -> Dict[str, Any]:
+    def ensure_obj(key: str, default: dict[str, Any]) -> dict[str, Any]:
         cur = events.get(key)
         if isinstance(cur, dict):
             return cur
@@ -61,13 +61,13 @@ def _package_events(out: Dict[str, Any], *, role: Role) -> None:
         noise["noise_change_ranges"] = []
 
 
-def _package_metrics(out: Dict[str, Any], *, role: Role) -> None:
+def _package_metrics(out: dict[str, Any], *, role: Role) -> None:
     metrics = out.get("metrics")
     if not isinstance(metrics, dict) or not metrics:
         return
 
     # Copy-on-write for metrics dict.
-    new_metrics: Dict[str, Any] = dict(metrics)
+    new_metrics: dict[str, Any] = dict(metrics)
     changed = False
 
     # Rule: Guest must not receive bpm.value.value_exact.
@@ -93,4 +93,3 @@ def _package_metrics(out: Dict[str, Any], *, role: Role) -> None:
 
     if changed:
         out["metrics"] = new_metrics
-

@@ -3,12 +3,14 @@ from __future__ import annotations
 import wave
 from pathlib import Path
 
+from engine.contracts.analysis_output import validate_analysis_output_v1
 from engine.core.config import EngineConfig
 from engine.pipeline.run import run_analysis_v1
-from engine.contracts.analysis_output import validate_analysis_output_v1
 
 
-def _write_silence_wav(path: Path, *, sr: int = 44100, seconds: float = 1.0, channels: int = 2) -> None:
+def _write_silence_wav(
+    path: Path, *, sr: int = 44100, seconds: float = 1.0, channels: int = 2
+) -> None:
     nframes = int(sr * seconds)
     sampwidth = 2  # 16-bit
     silence_frame = (b"\x00\x00") * channels  # one frame (all channels)

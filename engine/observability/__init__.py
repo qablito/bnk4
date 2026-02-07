@@ -1,2 +1,1 @@
 """Observability hooks (v1)."""
-

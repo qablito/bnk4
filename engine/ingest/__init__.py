@@ -9,5 +9,9 @@ Responsibilities:
 
 No analysis logic here (no BPM, no key, no grid).
 """
-from .types import DecodedAudio
-from .ingest import ingest_v1, IngestLimits
+
+from .ingest import IngestLimits as IngestLimits
+from .ingest import ingest_v1 as ingest_v1
+from .types import DecodedAudio as DecodedAudio
+
+__all__ = ["DecodedAudio", "IngestLimits", "ingest_v1"]

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import pytest
 
@@ -13,7 +13,7 @@ from engine.pipeline.run import run_analysis_v1
 
 
 def test_emits_started_and_completed_on_success(monkeypatch):
-    events: List[Tuple[str, Dict[str, Any]]] = []
+    events: list[tuple[str, dict[str, Any]]] = []
 
     def capture(event: str, **payload: Any) -> None:
         events.append((event, payload))
@@ -34,7 +34,7 @@ def test_emits_started_and_completed_on_success(monkeypatch):
 
 
 def test_emits_failed_with_error_code_on_engine_error(monkeypatch):
-    events: List[Tuple[str, Dict[str, Any]]] = []
+    events: list[tuple[str, dict[str, Any]]] = []
 
     def capture(event: str, **payload: Any) -> None:
         events.append((event, payload))
@@ -52,7 +52,7 @@ def test_emits_failed_with_error_code_on_engine_error(monkeypatch):
 
 
 def test_emits_feature_omitted_when_below_threshold(monkeypatch):
-    events: List[Tuple[str, Dict[str, Any]]] = []
+    events: list[tuple[str, dict[str, Any]]] = []
 
     def capture(event: str, **payload: Any) -> None:
         events.append((event, payload))
@@ -68,4 +68,3 @@ def test_emits_feature_omitted_when_below_threshold(monkeypatch):
     assert "bpm" in omitted_features
     assert "key_mode" in omitted_features
     assert all(p.get("reason") == "confidence_below_threshold" for p in omitted)
-

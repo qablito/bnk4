@@ -1,6 +1,10 @@
 import pytest
 
-from engine.contracts.analysis_output import validate_analysis_output_v1, ValidateOptions, ContractViolation
+from engine.contracts.analysis_output import (
+    ContractViolation,
+    ValidateOptions,
+    validate_analysis_output_v1,
+)
 
 
 def _base(role: str):
