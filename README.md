@@ -25,6 +25,12 @@ Lint + tests:
 ./scripts/lint.sh
 ```
 
+Optional pre-commit:
+```sh
+python -m pip install pre-commit
+pre-commit install
+```
+
 Build artifacts:
 ```sh
 python -m build
