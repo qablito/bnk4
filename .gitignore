@@ -17,6 +17,9 @@ venv/
 .mypy_cache/
 .ruff_cache/
 
+# Packaging
+*.egg-info/
+
 # Node / Frontend (si aplica)
 node_modules/
 .next/

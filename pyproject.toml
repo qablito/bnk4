@@ -6,13 +6,33 @@ build-backend = "setuptools.build_meta"
 name = "bnk-analysis-engine"
 version = "0.1.0"
 description = "BeetsNKeys (bnk4) analysis engine v1 (contract-first)"
+readme = "README.md"
 requires-python = ">=3.11"
+# SPDX expression. This is intentionally a license reference until the project chooses a published license.
+license = "LicenseRef-Proprietary"
+authors = [{ name = "BeetsNKeys", email = "dev@beetsnkeys.invalid" }]
+urls = { Repository = "https://example.invalid/beetsnkeys/bnk4" }
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+]
 dependencies = []
 
 [project.optional-dependencies]
 # Placeholders only (no heavy deps yet).
 audio = []
-dev = []
+dev = [
+  "pytest>=7",
+  "build>=1",
+  "twine>=4",
+  "ruff>=0.4",
+  "mypy>=1",
+]
 
 [tool.setuptools]
 include-package-data = false
