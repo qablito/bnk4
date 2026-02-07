@@ -24,6 +24,7 @@ Role = Literal["guest", "free", "pro"]
 _ASSERT_CONTRACT_ENV = "BNK_ENGINE_ASSERT_CONTRACT"
 _ASSERT_CONTRACT_TRUTHY = {"1", "true", "yes", "on"}
 
+
 def _env_assert_contract_enabled() -> bool:
     v = os.getenv(_ASSERT_CONTRACT_ENV)
     if v is None:
