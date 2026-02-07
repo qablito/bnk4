@@ -65,19 +65,19 @@ def _package_metrics(out: dict[str, Any], *, role: Role) -> None:
     metrics = out.get("metrics")
     if not isinstance(metrics, dict) or not metrics:
         return
-    
-# Guest must not receive numeric confidence on any metric block.
-if role == "guest":
-    for mname, mval in list(new_metrics.items()):
-        if isinstance(mval, dict) and "confidence" in mval:
-            nm = dict(mval)
-            nm.pop("confidence", None)
-            new_metrics[mname] = nm
-            changed = True
 
     # Copy-on-write for metrics dict.
     new_metrics: dict[str, Any] = dict(metrics)
     changed = False
+
+    # Guest: strip numeric confidence from any metric block (defense in depth).
+    if role == "guest":
+        for mname, mval in list(new_metrics.items()):
+            if isinstance(mval, dict) and "confidence" in mval:
+                nm = dict(mval)
+                nm.pop("confidence", None)
+                new_metrics[mname] = nm
+                changed = True
 
     # Rule: Guest must not receive bpm.value.value_exact.
     if role == "guest" and "bpm" in new_metrics and isinstance(new_metrics["bpm"], dict):
