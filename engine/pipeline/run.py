@@ -22,14 +22,13 @@ from engine.preprocess.preprocess_v1 import preprocess_v1
 Role = Literal["guest", "free", "pro"]
 
 _ASSERT_CONTRACT_ENV = "BNK_ENGINE_ASSERT_CONTRACT"
-_ASSERT_CONTRACT_TRUTHY = {"1", "true", "TRUE", "yes", "YES"}
-
+_ASSERT_CONTRACT_TRUTHY = {"1", "true", "yes", "on"}
 
 def _env_assert_contract_enabled() -> bool:
     v = os.getenv(_ASSERT_CONTRACT_ENV)
     if v is None:
         return False
-    return v in _ASSERT_CONTRACT_TRUTHY
+    return v.strip().lower() in _ASSERT_CONTRACT_TRUTHY
 
 
 def _now_rfc3339() -> str:
