@@ -180,13 +180,14 @@ def compute_metrics(
     top_bpm_errors_reportable = bpm_errors_reportable[:top_n_errors]
     top_bpm_errors_raw = bpm_errors_raw[:top_n_errors]
 
-    # Raw/reportable confusion stats (where both GT kinds exist and a prediction exists).
+    # Raw/reportable confusion stats (for fixtures with at least one GT and a prediction).
     confusions: list[BpmHalfDoubleConfusion] = []
     confusion_matrix = {
         "pred_matches_raw": 0,
         "pred_matches_reportable": 0,
         "pred_matches_both": 0,
         "pred_matches_neither": 0,
+        "gt_missing": 0,
     }
 
     for r in bpm_strict_results:
@@ -194,40 +195,43 @@ def compute_metrics(
             continue
         raw = r.fixture.bpm_gt_raw
         rep = r.fixture.bpm_gt_reportable
-        if raw is None or rep is None:
+        if raw is None and rep is None:
+            confusion_matrix["gt_missing"] += 1
             continue
         pred = float(r.bpm_value_rounded)
 
-        matches_raw = _close(pred, float(raw))
-        matches_rep = _close(pred, float(rep))
+        matches_raw = raw is not None and _close(pred, float(raw))
+        matches_rep = rep is not None and _close(pred, float(rep))
         if matches_raw and matches_rep:
             confusion_matrix["pred_matches_both"] += 1
         elif matches_raw and not matches_rep:
             confusion_matrix["pred_matches_raw"] += 1
-            confusions.append(
-                BpmHalfDoubleConfusion(
-                    path=r.fixture.path,
-                    bpm_gt_raw=float(raw),
-                    bpm_gt_reportable=float(rep),
-                    bpm_pred=int(round(pred)),
-                    relation="pred_matches_raw",
-                    candidates=_candidate_values_rounded(r),
-                    notes=r.fixture.notes,
+            if raw is not None and rep is not None:
+                confusions.append(
+                    BpmHalfDoubleConfusion(
+                        path=r.fixture.path,
+                        bpm_gt_raw=float(raw),
+                        bpm_gt_reportable=float(rep),
+                        bpm_pred=int(round(pred)),
+                        relation="pred_matches_raw",
+                        candidates=_candidate_values_rounded(r),
+                        notes=r.fixture.notes,
+                    )
                 )
-            )
         elif matches_rep and not matches_raw:
             confusion_matrix["pred_matches_reportable"] += 1
-            confusions.append(
-                BpmHalfDoubleConfusion(
-                    path=r.fixture.path,
-                    bpm_gt_raw=float(raw),
-                    bpm_gt_reportable=float(rep),
-                    bpm_pred=int(round(pred)),
-                    relation="pred_matches_reportable",
-                    candidates=_candidate_values_rounded(r),
-                    notes=r.fixture.notes,
+            if raw is not None and rep is not None:
+                confusions.append(
+                    BpmHalfDoubleConfusion(
+                        path=r.fixture.path,
+                        bpm_gt_raw=float(raw),
+                        bpm_gt_reportable=float(rep),
+                        bpm_pred=int(round(pred)),
+                        relation="pred_matches_reportable",
+                        candidates=_candidate_values_rounded(r),
+                        notes=r.fixture.notes,
+                    )
                 )
-            )
 
         else:
             confusion_matrix["pred_matches_neither"] += 1

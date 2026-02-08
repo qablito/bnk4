@@ -389,6 +389,7 @@ def test_compute_metrics_half_double_confusion_matrix() -> None:
         "pred_matches_reportable": 1,
         "pred_matches_both": 0,
         "pred_matches_neither": 1,
+        "gt_missing": 0,
     }
 
     json_blob = metrics_to_json(metrics)
@@ -407,4 +408,24 @@ def test_confusion_matrix_predicted_double_of_reportable_counts_as_neither() -> 
         "pred_matches_reportable": 0,
         "pred_matches_both": 0,
         "pred_matches_neither": 1,
+        "gt_missing": 0,
+    }
+
+
+def test_confusion_matrix_excludes_fixtures_with_missing_gt() -> None:
+    f = _make_fixture(
+        "reggaeton__80__Aminor__preguntandome.wav",
+        bpm_gt_raw=None,
+        bpm_gt_reportable=None,
+        flags={"bpm_strict"},
+    )
+    r = _make_result(f, bpm_value_rounded=80, bpm_omitted=False, bpm_reason_codes=["prefer_raw"])
+
+    metrics = compute_metrics([r], bpm_tolerance=1.0)
+    assert metrics.bpm_half_double_confusion_matrix == {
+        "pred_matches_raw": 0,
+        "pred_matches_reportable": 0,
+        "pred_matches_both": 0,
+        "pred_matches_neither": 0,
+        "gt_missing": 1,
     }
