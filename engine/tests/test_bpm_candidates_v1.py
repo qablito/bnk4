@@ -110,3 +110,36 @@ def test_guest_gating_strips_candidate_metadata_and_value_exact():
     # Candidates must not leak score/relation to guest.
     for c in bpm.get("candidates", []):
         assert set(c.keys()) <= {"value", "rank"}
+
+
+def test_non_guest_bpm_advanced_payload_exposes_ui_fields():
+    """
+    Backend schema alignment for the UI Advanced BPM panel.
+
+    The frontend is expected to map these exact keys into the advanced disclosure.
+    """
+    audio = DecodedAudio(sample_rate_hz=44100, channels=2, duration_seconds=30.0)
+    out = run_analysis_v1(
+        audio,
+        "pro",
+        config=EngineConfig(),
+        _test_overrides={"bpm_hint_windows": [71.4] * 12},
+    )
+
+    bpm = out["metrics"]["bpm"]
+    assert bpm["value"]["value_rounded"] == bpm["bpm_reportable"]
+    assert bpm["bpm_raw"] == 71.4
+    assert bpm["bpm_reportable"] == 71
+    assert bpm["timefeel"] in (
+        "normal",
+        "double_time_preferred",
+        "half_time_preferred",
+        "unknown",
+    )
+    assert isinstance(bpm.get("bpm_reason_codes"), list)
+    assert isinstance(bpm.get("bpm_candidates"), list)
+    assert len(bpm["bpm_candidates"]) <= 5
+    assert all(
+        {"candidate_bpm", "candidate_family", "candidate_score"} <= set(row.keys())
+        for row in bpm["bpm_candidates"]
+    )

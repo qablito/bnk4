@@ -35,6 +35,7 @@ def _make_result(
     bpm_omitted: bool = True,
     bpm_raw_value_rounded: int | None = None,
     bpm_raw_omitted: bool = True,
+    bpm_reason_codes: list[str] | None = None,
     skipped: bool = False,
 ) -> PredictionResult:
     """Helper to create a prediction result."""
@@ -48,6 +49,7 @@ def _make_result(
         bpm_omitted=bpm_omitted,
         bpm_raw_value_rounded=bpm_raw_value_rounded,
         bpm_raw_omitted=bpm_raw_omitted,
+        bpm_reason_codes=bpm_reason_codes,
     )
 
 
@@ -331,3 +333,126 @@ def test_bpm_family_match_rate_reportable_counts_half_double_as_match() -> None:
 
     metrics = compute_metrics([r1, r2], bpm_tolerance=1.0)
     assert metrics.bpm_family_match_rate_reportable == pytest.approx(0.5, abs=0.001)
+
+
+def test_compute_metrics_reportable_omit_reason_breakdown_and_policy_flip_rate() -> None:
+    f1 = _make_fixture("a.wav", bpm_gt_raw=70.0, bpm_gt_reportable=140.0, flags={"bpm_strict"})
+    f2 = _make_fixture("b.wav", bpm_gt_raw=85.0, bpm_gt_reportable=170.0, flags={"bpm_strict"})
+    f3 = _make_fixture("c.wav", bpm_gt_raw=90.0, bpm_gt_reportable=90.0, flags={"bpm_strict"})
+
+    r1 = _make_result(
+        f1,
+        bpm_value_rounded=None,
+        bpm_omitted=True,
+        bpm_raw_value_rounded=70,
+        bpm_raw_omitted=False,
+        bpm_reason_codes=["omitted_ambiguous_runnerup", "omitted_low_confidence"],
+    )
+    r2 = _make_result(
+        f2,
+        bpm_value_rounded=170,
+        bpm_omitted=False,
+        bpm_raw_value_rounded=85,
+        bpm_raw_omitted=False,
+        bpm_reason_codes=["prefer_double_time_from_raw", "has_direct_double_evidence"],
+    )
+    r3 = _make_result(
+        f3,
+        bpm_value_rounded=90,
+        bpm_omitted=False,
+        bpm_raw_value_rounded=90,
+        bpm_raw_omitted=False,
+        bpm_reason_codes=["prefer_raw"],
+    )
+
+    metrics = compute_metrics([r1, r2, r3], bpm_tolerance=1.0)
+    assert metrics.bpm_reportable_omit_reason_counts == {
+        "omitted_ambiguous_runnerup": 1,
+        "omitted_low_confidence": 1,
+    }
+    # Only emitted reportable rows with raw available count. r2 flips family, r3 does not.
+    assert metrics.bpm_policy_flip_rate == pytest.approx(0.5, abs=0.001)
+
+
+def test_compute_metrics_half_double_confusion_matrix() -> None:
+    f1 = _make_fixture("a.wav", bpm_gt_raw=70.0, bpm_gt_reportable=140.0, flags={"bpm_strict"})
+    f2 = _make_fixture("b.wav", bpm_gt_raw=75.0, bpm_gt_reportable=150.0, flags={"bpm_strict"})
+    f3 = _make_fixture("c.wav", bpm_gt_raw=85.0, bpm_gt_reportable=170.0, flags={"bpm_strict"})
+
+    r1 = _make_result(f1, bpm_value_rounded=70, bpm_omitted=False)  # matches raw
+    r2 = _make_result(f2, bpm_value_rounded=150, bpm_omitted=False)  # matches reportable
+    r3 = _make_result(f3, bpm_value_rounded=111, bpm_omitted=False)  # matches neither
+
+    metrics = compute_metrics([r1, r2, r3], bpm_tolerance=1.0)
+    assert metrics.bpm_half_double_confusion_matrix == {
+        "pred_matches_raw": 1,
+        "pred_matches_reportable": 1,
+        "pred_matches_both": 0,
+        "pred_matches_neither": 1,
+        "gt_missing": 0,
+    }
+
+    json_blob = metrics_to_json(metrics)
+    assert json_blob["bpm_half_double_confusion_matrix"]["pred_matches_raw"] == 1
+
+
+def test_confusion_matrix_predicted_double_of_reportable_counts_as_neither() -> None:
+    f = _make_fixture(
+        "reggaeton.wav", bpm_gt_raw=88.0, bpm_gt_reportable=88.0, flags={"bpm_strict"}
+    )
+    r = _make_result(f, bpm_value_rounded=176, bpm_omitted=False)
+
+    metrics = compute_metrics([r], bpm_tolerance=1.0)
+    assert metrics.bpm_half_double_confusion_matrix == {
+        "pred_matches_raw": 0,
+        "pred_matches_reportable": 0,
+        "pred_matches_both": 0,
+        "pred_matches_neither": 1,
+        "gt_missing": 0,
+    }
+
+
+def test_confusion_matrix_excludes_fixtures_with_missing_gt() -> None:
+    f = _make_fixture(
+        "reggaeton__80__Aminor__preguntandome.wav",
+        bpm_gt_raw=None,
+        bpm_gt_reportable=None,
+        flags={"bpm_strict"},
+    )
+    r = _make_result(f, bpm_value_rounded=80, bpm_omitted=False, bpm_reason_codes=["prefer_raw"])
+
+    metrics = compute_metrics([r], bpm_tolerance=1.0)
+    assert metrics.bpm_half_double_confusion_matrix == {
+        "pred_matches_raw": 0,
+        "pred_matches_reportable": 0,
+        "pred_matches_both": 0,
+        "pred_matches_neither": 0,
+        "gt_missing": 1,
+    }
+
+
+def test_confusion_matrix_counts_gt_missing_outside_bpm_strict_pool() -> None:
+    with_gt = _make_fixture(
+        "trap.wav",
+        bpm_gt_raw=70.0,
+        bpm_gt_reportable=140.0,
+        flags={"bpm_strict"},
+    )
+    missing_gt = _make_fixture(
+        "preguntandome.wav",
+        bpm_gt_raw=None,
+        bpm_gt_reportable=None,
+        flags={"key_strict", "ambiguous"},
+    )
+
+    r1 = _make_result(with_gt, bpm_value_rounded=70, bpm_omitted=False)
+    r2 = _make_result(missing_gt, bpm_value_rounded=80, bpm_omitted=False)
+
+    metrics = compute_metrics([r1, r2], bpm_tolerance=1.0)
+    assert metrics.bpm_half_double_confusion_matrix == {
+        "pred_matches_raw": 1,
+        "pred_matches_reportable": 0,
+        "pred_matches_both": 0,
+        "pred_matches_neither": 0,
+        "gt_missing": 1,
+    }

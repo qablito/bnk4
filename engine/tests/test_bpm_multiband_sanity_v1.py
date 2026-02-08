@@ -81,7 +81,7 @@ def test_low_score_details_are_filtered_out_before_scoring() -> None:
     )
     out = extract_bpm_v1(ctx, config=cfg)
     assert out is not None
-    # Raw is ~80; reportable defaults to 2x for DJ-facing BPM under the v1 policy.
+    # Raw is ~80; without direct double evidence, reportable stays raw.
     assert out.get("bpm_raw") == 80
-    assert out.get("bpm_reportable") == 160
-    assert out.get("value", {}).get("value_rounded") == 160
+    assert out.get("bpm_reportable") == 80
+    assert out.get("value", {}).get("value_rounded") == 80
