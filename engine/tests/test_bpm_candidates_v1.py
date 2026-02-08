@@ -67,6 +67,22 @@ def test_unstable_tempo_is_low_confidence_and_omits_value():
     assert len(out.get("candidates", [])) >= 5
 
 
+def test_nearby_windows_are_treated_as_stable_enough_to_return_value():
+    """
+    Real signals jitter by ~1 BPM between windows. v1 should not omit a value
+    purely due to +/-1 rounding noise when the tempo family is consistent.
+    """
+    cfg = EngineConfig()
+    out = extract_bpm_v1(
+        _ctx(duration_seconds=60.0, windows=[118.9, 119.2, 120.1, 118.7, 119.8, 120.2]),
+        config=cfg,
+    )
+    assert out is not None
+    assert out.get("confidence") in ("medium", "high")
+    assert out.get("value", {}).get("value_rounded") in (119, 120, 118)
+    assert len(out.get("candidates", [])) >= 5
+
+
 def test_guest_gating_strips_candidate_metadata_and_value_exact():
     audio = DecodedAudio(sample_rate_hz=44100, channels=2, duration_seconds=30.0)
     out = run_analysis_v1(
@@ -78,6 +94,18 @@ def test_guest_gating_strips_candidate_metadata_and_value_exact():
 
     bpm = out["metrics"]["bpm"]
     assert bpm["value"] == {"value_rounded": 140}
+
+    # Advanced policy fields must not leak to guest.
+    for k in (
+        "bpm_raw",
+        "bpm_raw_confidence",
+        "bpm_reportable",
+        "bpm_reportable_confidence",
+        "timefeel",
+        "bpm_reason_codes",
+        "bpm_candidates",
+    ):
+        assert k not in bpm
 
     # Candidates must not leak score/relation to guest.
     for c in bpm.get("candidates", []):

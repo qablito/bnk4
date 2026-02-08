@@ -23,3 +23,8 @@ class DecodedAudio:
 
     # Reserved for v2 / real decoding
     peak_dbfs: float | None = None
+
+    # v1 derived hints (computed from PCM when available)
+    bpm_hint_windows: list[float] | None = None
+    # Optional per-window detail for half/double ambiguity (internal; not exposed to guests).
+    bpm_hint_window_details: list[dict[str, float | None]] | None = None

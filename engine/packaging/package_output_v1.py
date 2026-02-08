@@ -13,6 +13,14 @@ GUEST_STRIP_KEYS_DEEP = {
     "relation",
     "score",
     "scores",
+    # BPM advanced policy fields (do not leak to guest).
+    "bpm_raw",
+    "bpm_raw_confidence",
+    "bpm_reportable",
+    "bpm_reportable_confidence",
+    "timefeel",
+    "bpm_reason_codes",
+    "bpm_candidates",
 }
 
 
