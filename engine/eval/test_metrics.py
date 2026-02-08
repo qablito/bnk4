@@ -429,3 +429,30 @@ def test_confusion_matrix_excludes_fixtures_with_missing_gt() -> None:
         "pred_matches_neither": 0,
         "gt_missing": 1,
     }
+
+
+def test_confusion_matrix_counts_gt_missing_outside_bpm_strict_pool() -> None:
+    with_gt = _make_fixture(
+        "trap.wav",
+        bpm_gt_raw=70.0,
+        bpm_gt_reportable=140.0,
+        flags={"bpm_strict"},
+    )
+    missing_gt = _make_fixture(
+        "preguntandome.wav",
+        bpm_gt_raw=None,
+        bpm_gt_reportable=None,
+        flags={"key_strict", "ambiguous"},
+    )
+
+    r1 = _make_result(with_gt, bpm_value_rounded=70, bpm_omitted=False)
+    r2 = _make_result(missing_gt, bpm_value_rounded=80, bpm_omitted=False)
+
+    metrics = compute_metrics([r1, r2], bpm_tolerance=1.0)
+    assert metrics.bpm_half_double_confusion_matrix == {
+        "pred_matches_raw": 1,
+        "pred_matches_reportable": 0,
+        "pred_matches_both": 0,
+        "pred_matches_neither": 0,
+        "gt_missing": 1,
+    }

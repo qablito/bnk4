@@ -180,7 +180,7 @@ def compute_metrics(
     top_bpm_errors_reportable = bpm_errors_reportable[:top_n_errors]
     top_bpm_errors_raw = bpm_errors_raw[:top_n_errors]
 
-    # Raw/reportable confusion stats (for fixtures with at least one GT and a prediction).
+    # Raw/reportable confusion stats (all successful BPM predictions, strict or not).
     confusions: list[BpmHalfDoubleConfusion] = []
     confusion_matrix = {
         "pred_matches_raw": 0,
@@ -189,10 +189,13 @@ def compute_metrics(
         "pred_matches_neither": 0,
         "gt_missing": 0,
     }
+    bpm_confusion_results = [
+        r
+        for r in results
+        if r.success and not r.skipped and (not r.bpm_omitted) and (r.bpm_value_rounded is not None)
+    ]
 
-    for r in bpm_strict_results:
-        if r.bpm_omitted or r.bpm_value_rounded is None:
-            continue
+    for r in bpm_confusion_results:
         raw = r.fixture.bpm_gt_raw
         rep = r.fixture.bpm_gt_reportable
         if raw is None and rep is None:
