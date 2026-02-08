@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import traceback
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from engine.core.errors import EngineError
 from engine.eval.eval_types import Fixture, PredictionResult
@@ -11,12 +12,70 @@ from engine.pipeline.run import run_analysis_v1
 
 Role = Literal["guest", "free", "pro"]
 
+_TRACEBACK_SHORT_MAX_LINES = 20
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _sanitize_traceback_text(text: str) -> str:
+    # Avoid leaking user paths and keep output more deterministic.
+    root = str(_REPO_ROOT)
+    return text.replace(root + "/", "").replace(root + "\\", "")
+
+
+def _infer_stage_from_engine_error(exc: EngineError) -> str:
+    ctx = exc.context or {}
+    stage = ctx.get("stage")
+    if isinstance(stage, str) and stage:
+        return stage
+
+    # Best-effort: decode/ingest errors generally include path/suffix context.
+    if exc.code in {"UNSUPPORTED_INPUT", "INVALID_INPUT"} and any(
+        k in ctx for k in ("path", "suffix")
+    ):
+        return "decode"
+
+    return "run_analysis_v1"
+
+
+def _format_traceback(exc: BaseException, *, full: bool) -> str:
+    lines = traceback.format_exception(type(exc), exc, exc.__traceback__)
+    text = _sanitize_traceback_text("".join(lines))
+    if full:
+        return text
+    head = text.splitlines()[:_TRACEBACK_SHORT_MAX_LINES]
+    return "\n".join(head)
+
+
+def _make_failure_info(exc: BaseException, *, debug_traceback: bool) -> dict[str, Any]:
+    stage = "run_analysis_v1"
+    engine_error_code: str | None = None
+    message: str
+
+    if isinstance(exc, EngineError):
+        stage = _infer_stage_from_engine_error(exc)
+        engine_error_code = exc.code
+        message = exc.message
+    else:
+        message = str(exc)
+
+    info: dict[str, Any] = {
+        "stage": stage,
+        "exc_type": type(exc).__name__,
+        "message": message,
+        "engine_error_code": engine_error_code,
+        "traceback_short": _format_traceback(exc, full=False),
+    }
+    if debug_traceback:
+        info["traceback_full"] = _format_traceback(exc, full=True)
+    return info
+
 
 def run_fixture(
     fixture: Fixture,
     *,
     role: Role = "pro",
     fail_on_missing: bool = False,
+    debug_traceback: bool = False,
 ) -> PredictionResult:
     """
     Run analysis on a single fixture and extract predictions.
@@ -42,6 +101,7 @@ def run_fixture(
             output=None,
             skipped=True,
             skip_reason=f"File not found: {fixture.path}",
+            skip_reason_code="file_not_found",
         )
 
     # Run analysis
@@ -49,14 +109,17 @@ def run_fixture(
         output = run_analysis_v1(input_path=str(audio_path), role=role)
         success = True
         error = None
+        failure = None
     except EngineError as exc:
         output = None
         success = False
         error = f"{exc.code}: {exc.message}"
+        failure = _make_failure_info(exc, debug_traceback=debug_traceback)
     except Exception as exc:
         output = None
         success = False
         error = f"Unexpected error: {type(exc).__name__}: {exc}"
+        failure = _make_failure_info(exc, debug_traceback=debug_traceback)
 
     # Extract predictions
     result = PredictionResult(
@@ -66,6 +129,8 @@ def run_fixture(
         output=output,
         skipped=False,
         skip_reason=None,
+        skip_reason_code=None,
+        failure=failure,
     )
 
     if output is not None and "metrics" in output:
@@ -80,9 +145,25 @@ def _extract_bpm(result: PredictionResult, metrics: dict) -> None:
     """Extract BPM prediction from metrics."""
     if "bpm" not in metrics:
         result.bpm_omitted = True
+        result.bpm_raw_omitted = True
         return
 
     bpm_block = metrics["bpm"]
+
+    # Preserve candidates even when bpm.value is omitted (low confidence / locked).
+    candidates = bpm_block.get("candidates")
+    if candidates and isinstance(candidates, list):
+        result.bpm_candidates = candidates
+
+    # Raw BPM can be present even when reportable bpm.value is omitted.
+    raw = bpm_block.get("bpm_raw")
+    if isinstance(raw, (int, float)):
+        result.bpm_raw_value_exact = float(raw)
+        result.bpm_raw_value_rounded = int(round(float(raw)))
+        result.bpm_raw_omitted = False
+    else:
+        result.bpm_raw_omitted = True
+
     if bpm_block.get("locked"):
         result.bpm_omitted = True
         return
@@ -100,11 +181,6 @@ def _extract_bpm(result: PredictionResult, metrics: dict) -> None:
         result.bpm_value_exact = float(val)
 
     result.bpm_omitted = result.bpm_value_rounded is None
-
-    # Extract candidates
-    candidates = bpm_block.get("candidates")
-    if candidates and isinstance(candidates, list):
-        result.bpm_candidates = candidates
 
 
 def _extract_key_mode(result: PredictionResult, metrics: dict) -> None:
@@ -134,6 +210,8 @@ def run_all_fixtures(
     role: Role = "pro",
     limit: int | None = None,
     fail_on_missing: bool = False,
+    fail_fast: bool = False,
+    debug_traceback: bool = False,
 ) -> list[PredictionResult]:
     """
     Run analysis on all fixtures.
@@ -152,6 +230,13 @@ def run_all_fixtures(
 
     results = []
     for fixture in fixtures:
-        result = run_fixture(fixture, role=role, fail_on_missing=fail_on_missing)
+        result = run_fixture(
+            fixture,
+            role=role,
+            fail_on_missing=fail_on_missing,
+            debug_traceback=debug_traceback,
+        )
         results.append(result)
+        if fail_fast and (not result.success and not result.skipped):
+            break
     return results

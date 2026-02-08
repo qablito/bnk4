@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 
 @dataclass
@@ -11,13 +11,25 @@ class Fixture:
     """Ground truth fixture for evaluation."""
 
     path: str
-    bpm_gt: float | None
+    bpm_gt_raw: float | None
+    bpm_gt_reportable: float | None
     key_gt: str | None  # e.g., "C", "C#", "D", etc.
     mode_gt: str | None  # "major" or "minor"
     flags: set[str]
     notes: str
     # Extra columns preserved as raw dict
     extra: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def bpm_gt(self) -> float | None:
+        """
+        Back-compat alias for the legacy single BPM ground truth.
+
+        Historically this harness used a single `bpm_gt` column. We now split
+        ground truth into raw (grid) and reportable (what a human would label).
+        Defaulting to reportable preserves prior semantics.
+        """
+        return self.bpm_gt_reportable
 
     @property
     def is_bpm_strict(self) -> bool:
@@ -50,12 +62,21 @@ class PredictionResult:
     output: dict[str, Any] | None
     skipped: bool = False
     skip_reason: str | None = None
+    skip_reason_code: str | None = None
+
+    # Structured diagnostics (safe-to-log). Populated on failed runs.
+    failure: dict[str, Any] | None = None
 
     # Extracted BPM predictions
     bpm_value_rounded: int | None = None
     bpm_value_exact: float | None = None
     bpm_candidates: list[dict[str, Any]] | None = None
     bpm_omitted: bool = True
+
+    # Extracted raw BPM (advanced; may be present even when reportable is omitted)
+    bpm_raw_value_rounded: int | None = None
+    bpm_raw_value_exact: float | None = None
+    bpm_raw_omitted: bool = True
 
     # Extracted key/mode predictions (for future use)
     key_value: str | None = None
@@ -73,6 +94,22 @@ class BpmError:
     abs_error: float
     candidates: list[int] | None
     notes: str
+    kind: Literal["raw", "reportable"] = "reportable"
+
+
+@dataclass
+class BpmHalfDoubleConfusion:
+    """
+    Diagnostic record for half/double-time mismatches between raw and reportable GT.
+    """
+
+    path: str
+    bpm_gt_raw: float
+    bpm_gt_reportable: float
+    bpm_pred: int
+    relation: Literal["pred_matches_raw", "pred_matches_reportable"]
+    candidates: list[int] | None
+    notes: str
 
 
 @dataclass
@@ -85,15 +122,28 @@ class EvalMetrics:
     failed_runs: int
     skipped_runs: int
 
-    # BPM metrics (only bpm_strict fixtures)
-    bpm_n_total_strict: int
-    bpm_n_predicted: int
-    bpm_n_omitted: int
-    bpm_mae: float | None  # Mean Absolute Error
-    bpm_omit_rate: float | None
+    # BPM metrics: reportable (what humans label)
+    bpm_reportable_n_total_strict: int
+    bpm_reportable_n_predicted: int
+    bpm_reportable_n_omitted: int
+    bpm_reportable_mae: float | None  # Mean Absolute Error
+    bpm_reportable_omit_rate: float | None
+    bpm_family_match_rate_reportable: float | None
 
-    # Top errors
-    top_bpm_errors: list[BpmError]
+    # BPM metrics: raw (grid / fundamental pulse)
+    bpm_raw_n_total_strict: int
+    bpm_raw_n_predicted: int
+    bpm_raw_n_omitted: int
+    bpm_raw_mae: float | None
+    bpm_raw_omit_rate: float | None
+
+    # Top errors per GT kind
+    top_bpm_errors_reportable: list[BpmError]
+    top_bpm_errors_raw: list[BpmError]
+
+    # Half/double confusion stats (only when both GT kinds are present)
+    bpm_half_double_confusion_count: int = 0
+    bpm_half_double_confusions: list[BpmHalfDoubleConfusion] = field(default_factory=list)
 
     # Key/mode metrics (for future)
     key_n_total_strict: int = 0

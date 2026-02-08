@@ -185,7 +185,8 @@ def run_analysis_v1(
                 has_rhythm_evidence=True,
                 has_tonal_evidence=True,
                 bpm_hint_exact=None,
-                bpm_hint_windows=None,
+                bpm_hint_windows=getattr(audio, "bpm_hint_windows", None),
+                bpm_hint_window_details=getattr(audio, "bpm_hint_window_details", None),
                 key_mode_hint=None,
                 key_mode_hint_windows=None,
             )
@@ -202,6 +203,9 @@ def run_analysis_v1(
                     ),
                     bpm_hint_exact=_test_overrides.get("bpm_hint_exact", ctx.bpm_hint_exact),
                     bpm_hint_windows=_test_overrides.get("bpm_hint_windows", ctx.bpm_hint_windows),
+                    bpm_hint_window_details=_test_overrides.get(
+                        "bpm_hint_window_details", ctx.bpm_hint_window_details
+                    ),
                     key_mode_hint=_test_overrides.get("key_mode_hint", ctx.key_mode_hint),
                     key_mode_hint_windows=_test_overrides.get(
                         "key_mode_hint_windows", ctx.key_mode_hint_windows

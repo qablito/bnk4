@@ -8,18 +8,21 @@ from pathlib import Path
 from engine.eval.eval_types import Fixture
 
 # Required columns (must be present in header)
-REQUIRED_COLUMNS = {"path", "bpm_gt", "key_gt", "mode_gt", "flags", "notes"}
+BASE_REQUIRED_COLUMNS = {"path", "key_gt", "mode_gt", "flags", "notes"}
+BPM_COLUMNS = {"bpm_gt", "bpm_gt_raw", "bpm_gt_reportable"}
 
 # Known optional columns (parsed specially)
-KNOWN_COLUMNS = REQUIRED_COLUMNS | {
-    "genre",
-    "bpm_reportable",
-    "bpm_raw",
-    "timefeel",
-    "bars",
-    "sections",
-    "drift",
-}
+KNOWN_COLUMNS = (
+    BASE_REQUIRED_COLUMNS
+    | BPM_COLUMNS
+    | {
+        "genre",
+        "timefeel",
+        "bars",
+        "sections",
+        "drift",
+    }
+)
 
 
 def load_fixtures(csv_path: Path) -> list[Fixture]:
@@ -61,9 +64,13 @@ def load_fixtures(csv_path: Path) -> list[Fixture]:
 
         # Validate required columns
         header_set = set(reader.fieldnames)
-        missing = REQUIRED_COLUMNS - header_set
+        missing = BASE_REQUIRED_COLUMNS - header_set
         if missing:
             raise ValueError(f"Missing required columns: {', '.join(sorted(missing))}")
+        if not (header_set & BPM_COLUMNS):
+            raise ValueError(
+                "Missing required BPM columns: expected one of " + ", ".join(sorted(BPM_COLUMNS))
+            )
 
         for row_num, row in enumerate(reader, start=2):  # row 1 is header
             # Skip empty rows and comments
@@ -86,8 +93,18 @@ def _parse_fixture_row(row: dict[str, str], fieldnames: list[str]) -> Fixture:
     if not path:
         raise ValueError("path cannot be empty")
 
-    # Parse ground truth values (empty = None)
-    bpm_gt = _parse_optional_float(row.get("bpm_gt", ""))
+    # Parse BPM ground truth.
+    #
+    # Backward compat:
+    # - If legacy `bpm_gt` exists AND the explicit columns are absent, treat it as reportable.
+    # - If `bpm_gt_raw` / `bpm_gt_reportable` columns exist in the header, they win.
+    has_explicit_bpm_cols = ("bpm_gt_raw" in fieldnames) or ("bpm_gt_reportable" in fieldnames)
+    bpm_gt_raw = _parse_optional_float(row.get("bpm_gt_raw", "")) if has_explicit_bpm_cols else None
+    if has_explicit_bpm_cols:
+        bpm_gt_reportable = _parse_optional_float(row.get("bpm_gt_reportable", ""))
+    else:
+        bpm_gt_reportable = _parse_optional_float(row.get("bpm_gt", ""))
+
     key_gt = _parse_optional_string(row.get("key_gt", ""))
     mode_gt = _parse_optional_string(row.get("mode_gt", ""))
 
@@ -105,14 +122,15 @@ def _parse_fixture_row(row: dict[str, str], fieldnames: list[str]) -> Fixture:
     # Collect extra columns
     extra = {}
     for col in fieldnames:
-        if col not in REQUIRED_COLUMNS:
+        if col not in (BASE_REQUIRED_COLUMNS | BPM_COLUMNS):
             val = row.get(col, "").strip()
             if val:
                 extra[col] = val
 
     return Fixture(
         path=path,
-        bpm_gt=bpm_gt,
+        bpm_gt_raw=bpm_gt_raw,
+        bpm_gt_reportable=bpm_gt_reportable,
         key_gt=key_gt,
         mode_gt=mode_gt,
         flags=flags,

@@ -15,6 +15,15 @@ def test_guest_metrics_deep_strip_confidence_and_evidence():
                 "value": {"value_rounded": 70, "value_exact": 69.8, "confidence": 0.12},
                 "confidence": 0.99,
                 "evidence": {"foo": "bar"},
+                "bpm_raw": 69.8,
+                "bpm_raw_confidence": "high",
+                "bpm_reportable": 140,
+                "bpm_reportable_confidence": "medium",
+                "timefeel": "double_time_preferred",
+                "bpm_reason_codes": ["prefer_double_time_from_raw"],
+                "bpm_candidates": [
+                    {"candidate_bpm": 70, "candidate_family": "half", "candidate_score": 0.9}
+                ],
                 "candidates": [{"rank": 1, "value": 70}],
             },
             "key_mode": {
@@ -32,6 +41,13 @@ def test_guest_metrics_deep_strip_confidence_and_evidence():
     # Deep stripped everywhere
     assert "confidence" not in bpm
     assert "evidence" not in bpm
+    assert "bpm_raw" not in bpm
+    assert "bpm_raw_confidence" not in bpm
+    assert "bpm_reportable" not in bpm
+    assert "bpm_reportable_confidence" not in bpm
+    assert "timefeel" not in bpm
+    assert "bpm_reason_codes" not in bpm
+    assert "bpm_candidates" not in bpm
     assert "confidence" not in bpm.get("value", {})
     assert "confidence" not in km
     assert "confidence" not in km.get("value", {})

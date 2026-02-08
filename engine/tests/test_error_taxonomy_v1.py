@@ -11,8 +11,8 @@ from engine.pipeline.run import run_analysis_v1
 
 
 def test_unsupported_extension_on_input_path_raises_engine_error(tmp_path):
-    p = tmp_path / "x.mp3"
-    p.write_bytes(b"not real mp3")
+    p = tmp_path / "x.flac"
+    p.write_bytes(b"not real flac")
 
     with pytest.raises(EngineError) as excinfo:
         run_analysis_v1(role="guest", input_path=str(p), config=EngineConfig())

@@ -27,6 +27,11 @@ PYTHONPATH=. python3 engine/eval/run_eval.py --limit 5
 PYTHONPATH=. python3 engine/eval/run_eval.py --fail-on-missing-files
 ```
 
+### Dependencies
+
+- MP3 fixtures require `ffmpeg` installed and discoverable on `PATH`.
+- WAV fixtures use stdlib-only ingest (no external decoder).
+
 ### CLI Options
 
 | Option | Default | Description |
@@ -37,6 +42,10 @@ PYTHONPATH=. python3 engine/eval/run_eval.py --fail-on-missing-files
 | `--limit N` | (all) | Limit number of fixtures to process |
 | `--fail-on-missing-files` | (skip) | Error if any audio file missing |
 | `--top-n N` | 20 | Number of worst BPM errors to report |
+| `--fail-fast` | (off) | Stop after first failure |
+| `--print-failures` | (off) | Print a TSV table of failures to stderr |
+| `--debug-traceback` | (off) | Include full tracebacks in JSON report |
+| `--limit-failures N` | 20 | Max failures included in JSON report (`-1` for unlimited) |
 
 ## CSV Schema
 

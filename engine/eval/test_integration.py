@@ -29,14 +29,16 @@ def test_end_to_end_empty_fixtures(tmp_path: Path) -> None:
 
     metrics = compute_metrics(results)
     assert metrics.total_fixtures == 0
-    assert metrics.bpm_mae is None
+    assert metrics.bpm_reportable_mae is None
+    assert metrics.bpm_raw_mae is None
 
 
 def test_run_fixture_missing_file(tmp_path: Path) -> None:
     """Test that missing files are handled gracefully when not fail_on_missing."""
     f = Fixture(
         path=str(tmp_path / "nonexistent.wav"),
-        bpm_gt=120.0,
+        bpm_gt_raw=None,
+        bpm_gt_reportable=120.0,
         key_gt="C",
         mode_gt="major",
         flags={"bpm_strict"},
@@ -53,7 +55,8 @@ def test_run_fixture_missing_file_fail_mode(tmp_path: Path) -> None:
     """Test that missing files raise error when fail_on_missing=True."""
     f = Fixture(
         path=str(tmp_path / "nonexistent.wav"),
-        bpm_gt=120.0,
+        bpm_gt_raw=None,
+        bpm_gt_reportable=120.0,
         key_gt="C",
         mode_gt="major",
         flags={"bpm_strict"},
@@ -69,7 +72,8 @@ def test_run_all_fixtures_with_limit(tmp_path: Path) -> None:
     fixtures = [
         Fixture(
             path=str(tmp_path / f"test{i}.wav"),
-            bpm_gt=120.0,
+            bpm_gt_raw=None,
+            bpm_gt_reportable=120.0,
             key_gt=None,
             mode_gt=None,
             flags=set(),
@@ -87,7 +91,8 @@ def test_json_report_stable_keys() -> None:
     fixtures = [
         Fixture(
             path="test.wav",
-            bpm_gt=120.0,
+            bpm_gt_raw=None,
+            bpm_gt_reportable=120.0,
             key_gt="C",
             mode_gt="major",
             flags={"bpm_strict"},
@@ -110,7 +115,17 @@ def test_json_report_stable_keys() -> None:
     report = metrics_to_json(metrics)
 
     # Verify all expected keys are present
-    assert set(report.keys()) == {"overall", "bpm", "key_mode", "top_bpm_errors"}
+    assert set(report.keys()) == {
+        "overall",
+        "bpm",
+        "bpm_reportable",
+        "bpm_raw",
+        "bpm_half_double_confusions",
+        "bpm_half_double_confusion_count",
+        "key_mode",
+        "top_bpm_errors",
+        "top_bpm_errors_raw",
+    }
     assert set(report["overall"].keys()) == {
         "total_fixtures",
         "successful_runs",
@@ -123,6 +138,7 @@ def test_json_report_stable_keys() -> None:
         "n_omitted",
         "mae",
         "omit_rate",
+        "family_match_rate",
     }
 
     # Ensure JSON is deterministic
@@ -140,12 +156,18 @@ def test_text_report_formatting() -> None:
         successful_runs=9,
         failed_runs=1,
         skipped_runs=0,
-        bpm_n_total_strict=5,
-        bpm_n_predicted=4,
-        bpm_n_omitted=1,
-        bpm_mae=2.5,
-        bpm_omit_rate=0.2,
-        top_bpm_errors=[
+        bpm_reportable_n_total_strict=5,
+        bpm_reportable_n_predicted=4,
+        bpm_reportable_n_omitted=1,
+        bpm_reportable_mae=2.5,
+        bpm_reportable_omit_rate=0.2,
+        bpm_family_match_rate_reportable=0.75,
+        bpm_raw_n_total_strict=5,
+        bpm_raw_n_predicted=4,
+        bpm_raw_n_omitted=1,
+        bpm_raw_mae=2.5,
+        bpm_raw_omit_rate=0.2,
+        top_bpm_errors_reportable=[
             BpmError(
                 path="worst.wav",
                 bpm_gt=120.0,
@@ -153,8 +175,10 @@ def test_text_report_formatting() -> None:
                 candidates=[130, 65],
                 abs_error=10.0,
                 notes="Test note",
+                kind="reportable",
             )
         ],
+        top_bpm_errors_raw=[],
     )
 
     report = format_text_report(metrics)
@@ -181,11 +205,14 @@ test_with_key.wav,,C,major,key_strict,Only key ground truth
     assert len(fixtures) == 3
 
     # Verify ground truth parsing
-    assert fixtures[0].bpm_gt is None
+    assert fixtures[0].bpm_gt_reportable is None
+    assert fixtures[0].bpm_gt_raw is None
     assert fixtures[0].key_gt is None
-    assert fixtures[1].bpm_gt == 120.0
+    assert fixtures[1].bpm_gt_reportable == 120.0
+    assert fixtures[1].bpm_gt_raw is None
     assert fixtures[1].key_gt is None
-    assert fixtures[2].bpm_gt is None
+    assert fixtures[2].bpm_gt_reportable is None
+    assert fixtures[2].bpm_gt_raw is None
     assert fixtures[2].key_gt == "C"
 
 

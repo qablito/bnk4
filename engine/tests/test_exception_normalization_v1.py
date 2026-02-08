@@ -36,7 +36,7 @@ def test_invalid_input_emits_failed_with_invalid_input(monkeypatch):
 
 def test_ingest_unsupported_extension_emits_failed_with_unsupported_input(tmp_path, monkeypatch):
     events = _capture_emit(monkeypatch)
-    p = tmp_path / "x.mp3"
+    p = tmp_path / "x.flac"
     p.write_bytes(b"nope")
 
     with pytest.raises(EngineError) as excinfo:
