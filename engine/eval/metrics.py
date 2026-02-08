@@ -143,14 +143,51 @@ def compute_metrics(
         else None
     )
 
+    # Omit reason breakdown for reportable (strict fixtures with reportable GT only).
+    bpm_reportable_omit_reason_counts: dict[str, int] = {}
+    for r in reportable_with_gt:
+        if not r.bpm_omitted:
+            continue
+        omitted_codes = [c for c in (r.bpm_reason_codes or []) if str(c).startswith("omitted_")]
+        if not omitted_codes:
+            omitted_codes = ["omitted_unknown"]
+        for code in omitted_codes:
+            k = str(code)
+            bpm_reportable_omit_reason_counts[k] = bpm_reportable_omit_reason_counts.get(k, 0) + 1
+    bpm_reportable_omit_reason_counts = dict(sorted(bpm_reportable_omit_reason_counts.items()))
+
+    # Policy flip rate: among emitted reportable values with raw predictions,
+    # how often does reportable differ from raw by more than tolerance?
+    flip_eligible = [
+        r
+        for r in reportable_predicted
+        if (not r.bpm_raw_omitted) and (r.bpm_raw_value_rounded is not None)
+    ]
+    bpm_policy_flip_rate = (
+        sum(
+            1
+            for r in flip_eligible
+            if not _close(float(r.bpm_value_rounded), float(r.bpm_raw_value_rounded))  # type: ignore[arg-type]
+        )
+        / float(len(flip_eligible))
+        if flip_eligible
+        else None
+    )
+
     # Sort BPM errors by abs_error descending, take top N
     bpm_errors_reportable.sort(key=lambda e: e.abs_error, reverse=True)
     bpm_errors_raw.sort(key=lambda e: e.abs_error, reverse=True)
     top_bpm_errors_reportable = bpm_errors_reportable[:top_n_errors]
     top_bpm_errors_raw = bpm_errors_raw[:top_n_errors]
 
-    # Half/double confusion stats (only where both GT kinds exist and a prediction exists).
+    # Raw/reportable confusion stats (where both GT kinds exist and a prediction exists).
     confusions: list[BpmHalfDoubleConfusion] = []
+    confusion_matrix = {
+        "pred_matches_raw": 0,
+        "pred_matches_reportable": 0,
+        "pred_matches_both": 0,
+        "pred_matches_neither": 0,
+    }
 
     for r in bpm_strict_results:
         if r.bpm_omitted or r.bpm_value_rounded is None:
@@ -161,16 +198,12 @@ def compute_metrics(
             continue
         pred = float(r.bpm_value_rounded)
 
-        # Only consider cases where GTs are approximately related by 2x.
-        is_half_double_pair = _close(float(rep), 2.0 * float(raw)) or _close(
-            float(raw), 2.0 * float(rep)
-        )
-        if not is_half_double_pair:
-            continue
-
         matches_raw = _close(pred, float(raw))
         matches_rep = _close(pred, float(rep))
-        if matches_raw and not matches_rep:
+        if matches_raw and matches_rep:
+            confusion_matrix["pred_matches_both"] += 1
+        elif matches_raw and not matches_rep:
+            confusion_matrix["pred_matches_raw"] += 1
             confusions.append(
                 BpmHalfDoubleConfusion(
                     path=r.fixture.path,
@@ -183,6 +216,7 @@ def compute_metrics(
                 )
             )
         elif matches_rep and not matches_raw:
+            confusion_matrix["pred_matches_reportable"] += 1
             confusions.append(
                 BpmHalfDoubleConfusion(
                     path=r.fixture.path,
@@ -194,6 +228,9 @@ def compute_metrics(
                     notes=r.fixture.notes,
                 )
             )
+
+        else:
+            confusion_matrix["pred_matches_neither"] += 1
 
     confusions.sort(key=lambda c: c.path)
     if top_n_confusions >= 0:
@@ -211,6 +248,8 @@ def compute_metrics(
         bpm_reportable_mae=bpm_reportable_mae,
         bpm_reportable_omit_rate=bpm_reportable_omit_rate,
         bpm_family_match_rate_reportable=bpm_family_match_rate_reportable,
+        bpm_reportable_omit_reason_counts=bpm_reportable_omit_reason_counts,
+        bpm_policy_flip_rate=bpm_policy_flip_rate,
         bpm_raw_n_total_strict=bpm_raw_n_total_strict,
         bpm_raw_n_predicted=bpm_raw_n_predicted,
         bpm_raw_n_omitted=bpm_raw_n_omitted,
@@ -220,6 +259,7 @@ def compute_metrics(
         top_bpm_errors_raw=top_bpm_errors_raw,
         bpm_half_double_confusion_count=bpm_half_double_confusion_count,
         bpm_half_double_confusions=confusions,
+        bpm_half_double_confusion_matrix=confusion_matrix,
     )
 
 
@@ -240,6 +280,8 @@ def metrics_to_json(metrics: EvalMetrics) -> dict[str, Any]:
             "mae": metrics.bpm_reportable_mae,
             "omit_rate": metrics.bpm_reportable_omit_rate,
             "family_match_rate": metrics.bpm_family_match_rate_reportable,
+            "omit_reason_counts": metrics.bpm_reportable_omit_reason_counts,
+            "policy_flip_rate": metrics.bpm_policy_flip_rate,
         },
         "bpm_reportable": {
             "n_total_strict": metrics.bpm_reportable_n_total_strict,
@@ -248,6 +290,8 @@ def metrics_to_json(metrics: EvalMetrics) -> dict[str, Any]:
             "mae": metrics.bpm_reportable_mae,
             "omit_rate": metrics.bpm_reportable_omit_rate,
             "family_match_rate": metrics.bpm_family_match_rate_reportable,
+            "omit_reason_counts": metrics.bpm_reportable_omit_reason_counts,
+            "policy_flip_rate": metrics.bpm_policy_flip_rate,
         },
         "bpm_raw": {
             "n_total_strict": metrics.bpm_raw_n_total_strict,
@@ -269,6 +313,7 @@ def metrics_to_json(metrics: EvalMetrics) -> dict[str, Any]:
             for c in metrics.bpm_half_double_confusions
         ],
         "bpm_half_double_confusion_count": metrics.bpm_half_double_confusion_count,
+        "bpm_half_double_confusion_matrix": metrics.bpm_half_double_confusion_matrix,
         "key_mode": {
             "n_total_strict": metrics.key_n_total_strict,
             "n_predicted": metrics.key_n_predicted,
@@ -335,6 +380,12 @@ def format_text_report(metrics: EvalMetrics) -> str:
         lines.append(
             f"    Family match rate: {metrics.bpm_family_match_rate_reportable * 100:.1f}%"
         )
+    if metrics.bpm_policy_flip_rate is not None:
+        lines.append(f"    Policy flip rate: {metrics.bpm_policy_flip_rate * 100:.1f}%")
+    if metrics.bpm_reportable_omit_reason_counts:
+        lines.append("    Omit reasons:")
+        for code, count in metrics.bpm_reportable_omit_reason_counts.items():
+            lines.append(f"      - {code}: {count}")
 
     lines.append("  Raw:")
     lines.append(f"    Total strict: {metrics.bpm_raw_n_total_strict}")
@@ -351,8 +402,12 @@ def format_text_report(metrics: EvalMetrics) -> str:
 
     if metrics.bpm_half_double_confusion_count:
         lines.append("")
-        lines.append("Half/Double Confusions (raw vs reportable GT):")
+        lines.append("Raw vs Reportable Confusions:")
         lines.append(f"  Count: {metrics.bpm_half_double_confusion_count}")
+        if metrics.bpm_half_double_confusion_matrix:
+            lines.append("  Match matrix:")
+            for k, v in metrics.bpm_half_double_confusion_matrix.items():
+                lines.append(f"    - {k}: {v}")
     lines.append("")
 
     # Top BPM errors (reportable)

@@ -155,6 +155,14 @@ def _extract_bpm(result: PredictionResult, metrics: dict) -> None:
     if candidates and isinstance(candidates, list):
         result.bpm_candidates = candidates
 
+    codes = bpm_block.get("bpm_reason_codes")
+    if isinstance(codes, list):
+        result.bpm_reason_codes = [str(x) for x in codes]
+
+    structured = bpm_block.get("bpm_candidates")
+    if structured and isinstance(structured, list):
+        result.bpm_candidates_structured = structured
+
     # Raw BPM can be present even when reportable bpm.value is omitted.
     raw = bpm_block.get("bpm_raw")
     if isinstance(raw, (int, float)):

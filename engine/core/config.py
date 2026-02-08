@@ -73,7 +73,10 @@ class EngineV1Tunables:
     bpm_reportable_double_min: int = 120
     bpm_reportable_double_max: int = 190
     bpm_reportable_unrelated_competitor_threshold: float = 0.30
+    bpm_reportable_require_direct_double_evidence_for_flip: bool = True
     bpm_reportable_confidence_cap_without_direct_double_evidence: str = "medium"
+    bpm_reportable_direct_double_min_score: float = 0.12
+    bpm_reportable_direct_double_min_support: float = 0.08
 
 
 DEFAULT_TUNABLES_V1 = EngineV1Tunables()

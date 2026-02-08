@@ -122,6 +122,7 @@ def test_json_report_stable_keys() -> None:
         "bpm_raw",
         "bpm_half_double_confusions",
         "bpm_half_double_confusion_count",
+        "bpm_half_double_confusion_matrix",
         "key_mode",
         "top_bpm_errors",
         "top_bpm_errors_raw",
@@ -139,6 +140,8 @@ def test_json_report_stable_keys() -> None:
         "mae",
         "omit_rate",
         "family_match_rate",
+        "omit_reason_counts",
+        "policy_flip_rate",
     }
 
     # Ensure JSON is deterministic
@@ -162,6 +165,8 @@ def test_text_report_formatting() -> None:
         bpm_reportable_mae=2.5,
         bpm_reportable_omit_rate=0.2,
         bpm_family_match_rate_reportable=0.75,
+        bpm_reportable_omit_reason_counts={"omitted_low_confidence": 1},
+        bpm_policy_flip_rate=0.5,
         bpm_raw_n_total_strict=5,
         bpm_raw_n_predicted=4,
         bpm_raw_n_omitted=1,
@@ -179,6 +184,12 @@ def test_text_report_formatting() -> None:
             )
         ],
         top_bpm_errors_raw=[],
+        bpm_half_double_confusion_matrix={
+            "pred_matches_raw": 0,
+            "pred_matches_reportable": 0,
+            "pred_matches_both": 0,
+            "pred_matches_neither": 0,
+        },
     )
 
     report = format_text_report(metrics)

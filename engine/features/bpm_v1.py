@@ -237,6 +237,7 @@ def _select_reportable_bpm_from_raw_v1(
     scored: list[tuple[int, float]],
     tol_bpm: int,
     config: EngineConfig,
+    double_window_support: float = 0.0,
 ) -> tuple[int | None, str, str, list[str]]:
     """
     Pure policy: decide UI-facing "reportable" BPM from raw BPM + evidence.
@@ -244,20 +245,14 @@ def _select_reportable_bpm_from_raw_v1(
     Returns:
       (bpm_reportable_rounded_or_none, bpm_reportable_confidence, timefeel, reason_codes)
     """
-    codes: list[str] = []
-
     # If raw itself is low confidence, reportable must be omitted (DO NOT LIE).
     if str(raw_confidence).lower() == "low":
         return None, "low", "unknown", ["omitted_low_confidence"]
 
     raw_exact = float(raw_bpm_exact)
     raw_round = int(raw_bpm_rounded)
-
-    # Default behavior: prefer raw.
-    reportable = int(round(raw_exact))
+    reportable_raw = int(round(raw_exact))
     reportable_conf = str(raw_confidence)
-    timefeel = "normal"
-    codes.append("prefer_raw")
 
     # Only consider 2x when raw is in the slower band.
     stab_min = float(config.tunables.bpm_reportable_raw_stability_min)
@@ -265,57 +260,90 @@ def _select_reportable_bpm_from_raw_v1(
     dbl_min = int(config.tunables.bpm_reportable_double_min)
     dbl_max = int(config.tunables.bpm_reportable_double_max)
     runner_thresh = float(config.tunables.bpm_reportable_unrelated_competitor_threshold)
+    require_direct_for_flip = bool(
+        getattr(config.tunables, "bpm_reportable_require_direct_double_evidence_for_flip", True)
+    )
     cap = str(config.tunables.bpm_reportable_confidence_cap_without_direct_double_evidence)
+    direct_min_score = float(
+        getattr(config.tunables, "bpm_reportable_direct_double_min_score", 0.12)
+    )
+    direct_min_support = float(
+        getattr(config.tunables, "bpm_reportable_direct_double_min_support", 0.08)
+    )
 
+    # Default behavior: prefer raw.
     if raw_exact > raw_max:
-        codes.append("capped_by_raw_max")
-        return reportable, reportable_conf, timefeel, codes
-
+        return reportable_raw, reportable_conf, "normal", ["prefer_raw", "capped_by_raw_max"]
     if raw_stability < stab_min:
-        # Stable raw is a prerequisite for doubling.
-        return reportable, reportable_conf, timefeel, codes
+        return reportable_raw, reportable_conf, "normal", ["prefer_raw"]
 
     dbl_exact = 2.0 * raw_exact
     dbl_round = int(round(dbl_exact))
     if dbl_round < dbl_min or dbl_round > dbl_max:
-        return reportable, reportable_conf, timefeel, codes
+        return (
+            reportable_raw,
+            reportable_conf,
+            "normal",
+            ["prefer_raw", "capped_by_reportable_range"],
+        )
+
+    tol = max(0, int(tol_bpm))
+    max_double_score = 0.0
+    for bpm_i, score in scored:
+        if abs(int(bpm_i) - dbl_round) <= tol:
+            max_double_score = max(max_double_score, float(score))
+
+    has_direct_double_evidence = bool(
+        max_double_score >= direct_min_score or float(double_window_support) >= direct_min_support
+    )
+    direct_code = (
+        "has_direct_double_evidence" if has_direct_double_evidence else "no_direct_double_evidence"
+    )
 
     # Detect strong unrelated competitor (in a different tempo family).
     #
-    # We treat +/-jitter and triplet/dotted as equivalent and ignore them for
-    # "unrelated competitor" checks, but we do NOT ignore half/double ambiguity.
+    # For reportable policy we consider raw and its 2x projection as the same
+    # tempo family. A competing runner-up must be unrelated to both.
     top_score = float(scored[0][1]) if scored else 0.0
     runner_score = 0.0
     gap_tol = int(getattr(config.tunables, "bpm_gap_family_tolerance_bpm", max(2, int(tol_bpm))))
     for bpm_i, score in scored[1:]:
-        if not _tempo_triplet_family_agrees(raw_round, int(bpm_i), tol_bpm=gap_tol):
-            runner_score = float(score)
-            break
+        bpm_i_int = int(bpm_i)
+        if _tempo_family_agrees(raw_round, bpm_i_int, tol_bpm=gap_tol):
+            continue
+        if _tempo_family_agrees(dbl_round, bpm_i_int, tol_bpm=gap_tol):
+            continue
+        runner_score = float(score)
+        break
     runner_frac = (
         (runner_score / top_score) if top_score > 0 else (1.0 if runner_score > 0 else 0.0)
     )
     if runner_frac >= runner_thresh:
-        return None, "low", "unknown", ["ambiguous_runner_up", "omitted_low_confidence"]
+        return (
+            None,
+            "low",
+            "unknown",
+            ["omitted_ambiguous_runnerup", "omitted_low_confidence", direct_code],
+        )
 
-    # Safe to prefer double-time as reportable.
-    reportable = dbl_round
-    timefeel = "double_time_preferred"
-    codes = ["prefer_double_time_from_raw"]
+    # v1.2 safety gate: do not flip raw->double without direct 2x evidence.
+    if require_direct_for_flip and (not has_direct_double_evidence):
+        return (
+            reportable_raw,
+            reportable_conf,
+            "normal",
+            ["no_direct_double_evidence", "prefer_raw"],
+        )
 
-    # Prefer emitting when within +/-1 of a candidate.
-    if any(abs(int(b) - reportable) <= 1 for b, _ in scored):
+    # Soft-accept path: raw stable + range-valid + no strong unrelated competitor.
+    codes = ["prefer_double_time_from_raw", direct_code]
+    if any(abs(int(b) - dbl_round) <= 1 for b, _ in scored):
         codes.append("prefer_emit_within_1")
 
-    # Cap confidence to medium unless we have direct double evidence.
-    #
-    # We treat a non-zero score near the doubled tempo as direct evidence.
-    direct_double = any(
-        abs(int(b) - reportable) <= max(0, int(tol_bpm)) and float(s) > 0.0 for b, s in scored
-    )
-    if not direct_double and reportable_conf.lower() == "high":
+    if (not has_direct_double_evidence) and reportable_conf.lower() == "high":
         reportable_conf = cap
 
-    return reportable, reportable_conf, timefeel, codes
+    return dbl_round, reportable_conf, "double_time_preferred", codes
 
 
 def _weighted_mode_bpm_from_details(
@@ -721,6 +749,13 @@ def extract_bpm_v1(ctx: FeatureContext, *, config: EngineConfig) -> dict[str, An
     raw_exact = (
         sum(raw_supporting) / float(len(raw_supporting)) if raw_supporting else float(int(top_bpm))
     )
+    double_reportable_candidate = int(round(2.0 * float(raw_exact)))
+    double_window_support = (
+        sum(1 for w in windows_folded if abs(int(w) - double_reportable_candidate) <= tol)
+        / float(len(windows_folded))
+        if windows_folded
+        else 0.0
+    )
 
     (
         bpm_reportable,
@@ -735,6 +770,7 @@ def extract_bpm_v1(ctx: FeatureContext, *, config: EngineConfig) -> dict[str, An
         scored=[(int(b), float(s)) for b, s in scored],
         tol_bpm=int(tol_bpm),
         config=config,
+        double_window_support=float(double_window_support),
     )
 
     # Back-compat: top-level bpm.confidence/value reflect the reportable selection.

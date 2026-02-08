@@ -77,6 +77,10 @@ class PredictionResult:
     bpm_raw_value_rounded: int | None = None
     bpm_raw_value_exact: float | None = None
     bpm_raw_omitted: bool = True
+    # Deterministic policy trace from metrics.bpm.bpm_reason_codes.
+    bpm_reason_codes: list[str] | None = None
+    # Structured advanced candidates from metrics.bpm.bpm_candidates (family + score).
+    bpm_candidates_structured: list[dict[str, Any]] | None = None
 
     # Extracted key/mode predictions (for future use)
     key_value: str | None = None
@@ -129,6 +133,8 @@ class EvalMetrics:
     bpm_reportable_mae: float | None  # Mean Absolute Error
     bpm_reportable_omit_rate: float | None
     bpm_family_match_rate_reportable: float | None
+    bpm_reportable_omit_reason_counts: dict[str, int]
+    bpm_policy_flip_rate: float | None
 
     # BPM metrics: raw (grid / fundamental pulse)
     bpm_raw_n_total_strict: int
@@ -144,6 +150,7 @@ class EvalMetrics:
     # Half/double confusion stats (only when both GT kinds are present)
     bpm_half_double_confusion_count: int = 0
     bpm_half_double_confusions: list[BpmHalfDoubleConfusion] = field(default_factory=list)
+    bpm_half_double_confusion_matrix: dict[str, int] = field(default_factory=dict)
 
     # Key/mode metrics (for future)
     key_n_total_strict: int = 0

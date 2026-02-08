@@ -263,6 +263,7 @@ def _fixture_debug_rows(results: list[Any]) -> list[dict[str, Any]]:
         predicted_bpm_reportable_confidence = None
         predicted_timefeel = None
         predicted_reason_codes = None
+        predicted_candidates_structured = None
         if bpm_block is not None:
             predicted_bpm_raw = bpm_block.get("bpm_raw")
             predicted_bpm_raw_confidence = bpm_block.get("bpm_raw_confidence")
@@ -270,6 +271,7 @@ def _fixture_debug_rows(results: list[Any]) -> list[dict[str, Any]]:
             predicted_bpm_reportable_confidence = bpm_block.get("bpm_reportable_confidence")
             predicted_timefeel = bpm_block.get("timefeel")
             predicted_reason_codes = bpm_block.get("bpm_reason_codes")
+            predicted_candidates_structured = bpm_block.get("bpm_candidates")
 
         rows.append(
             {
@@ -284,6 +286,7 @@ def _fixture_debug_rows(results: list[Any]) -> list[dict[str, Any]]:
                 "predicted_bpm_reportable_confidence": predicted_bpm_reportable_confidence,
                 "predicted_timefeel": predicted_timefeel,
                 "predicted_bpm_reason_codes": predicted_reason_codes,
+                "predicted_bpm_candidates": predicted_candidates_structured,
                 "top_candidates_rounded": top_candidates,
                 "bpm_omitted": omitted,
                 "omitted_due_to_confidence": omitted_due_to_confidence,
