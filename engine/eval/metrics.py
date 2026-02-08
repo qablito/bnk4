@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from engine.eval.eval_types import BpmError, EvalMetrics, PredictionResult
+from engine.eval.eval_types import BpmError, BpmHalfDoubleConfusion, EvalMetrics, PredictionResult
 
 
 def compute_metrics(
     results: list[PredictionResult],
     *,
     top_n_errors: int = 20,
+    bpm_tolerance: float = 1.0,
+    top_n_confusions: int = 10,
 ) -> EvalMetrics:
     """
     Compute evaluation metrics from prediction results.
@@ -31,70 +33,193 @@ def compute_metrics(
     bpm_strict_results = [
         r for r in results if r.success and not r.skipped and r.fixture.is_bpm_strict
     ]
-    bpm_n_total_strict = len(bpm_strict_results)
 
-    # Predicted = not omitted
-    bpm_predicted_results = [r for r in bpm_strict_results if not r.bpm_omitted]
-    bpm_n_predicted = len(bpm_predicted_results)
-    bpm_n_omitted = bpm_n_total_strict - bpm_n_predicted
+    def _close(a: float, b: float) -> bool:
+        return abs(float(a) - float(b)) <= float(bpm_tolerance)
 
-    # Compute MAE and collect errors
-    bpm_mae = None
-    bpm_omit_rate = None
-    bpm_errors_list: list[BpmError] = []
+    def _candidate_values_rounded(r: PredictionResult) -> list[int] | None:
+        if not r.bpm_candidates:
+            return None
+        out: list[int] = []
+        for c in r.bpm_candidates:
+            val = c.get("value", {})
+            if isinstance(val, dict):
+                vr = val.get("value_rounded")
+                if vr is not None:
+                    out.append(int(vr))
+            elif isinstance(val, (int, float)):
+                out.append(int(round(val)))
+        return out or None
 
-    if bpm_n_total_strict > 0:
-        bpm_omit_rate = bpm_n_omitted / bpm_n_total_strict
+    def _compute_bpm_section(
+        *,
+        kind: str,
+        gt_selector,
+        pred_selector,
+        omitted_selector,
+    ) -> tuple[int, int, int, float | None, float | None, list[BpmError]]:
+        strict_with_gt = [r for r in bpm_strict_results if gt_selector(r.fixture) is not None]
+        n_total = len(strict_with_gt)
+        predicted = [
+            r
+            for r in strict_with_gt
+            if (not omitted_selector(r)) and (pred_selector(r) is not None)
+        ]
+        n_pred = len(predicted)
+        n_omit = n_total - n_pred
+        omit_rate = (n_omit / n_total) if n_total > 0 else None
 
-    if bpm_predicted_results:
-        abs_errors = []
-        for r in bpm_predicted_results:
-            if r.fixture.bpm_gt is not None and r.bpm_value_rounded is not None:
-                abs_error = abs(r.bpm_value_rounded - r.fixture.bpm_gt)
-                abs_errors.append(abs_error)
-
-                # Extract candidate values (rounded) for debugging
-                candidates_rounded = None
-                if r.bpm_candidates:
-                    candidates_rounded = []
-                    for c in r.bpm_candidates:
-                        val = c.get("value", {})
-                        if isinstance(val, dict):
-                            vr = val.get("value_rounded")
-                            if vr is not None:
-                                candidates_rounded.append(vr)
-                        elif isinstance(val, (int, float)):
-                            candidates_rounded.append(int(round(val)))
-
-                bpm_errors_list.append(
-                    BpmError(
-                        path=r.fixture.path,
-                        bpm_gt=r.fixture.bpm_gt,
-                        bpm_pred=r.bpm_value_rounded,
-                        abs_error=abs_error,
-                        candidates=candidates_rounded,
-                        notes=r.fixture.notes,
-                    )
+        errors: list[BpmError] = []
+        abs_errors: list[float] = []
+        for r in predicted:
+            gt = gt_selector(r.fixture)
+            if gt is None:
+                continue
+            pred = pred_selector(r)
+            if pred is None:
+                continue
+            ae = abs(float(pred) - float(gt))
+            abs_errors.append(ae)
+            errors.append(
+                BpmError(
+                    path=r.fixture.path,
+                    bpm_gt=float(gt),
+                    bpm_pred=int(pred),
+                    abs_error=float(ae),
+                    candidates=_candidate_values_rounded(r),
+                    notes=r.fixture.notes,
+                    kind="raw" if kind == "raw" else "reportable",
                 )
+            )
+        mae = (sum(abs_errors) / float(len(abs_errors))) if abs_errors else None
+        return n_total, n_pred, n_omit, mae, omit_rate, errors
 
-        if abs_errors:
-            bpm_mae = sum(abs_errors) / len(abs_errors)
+    (
+        bpm_reportable_n_total_strict,
+        bpm_reportable_n_predicted,
+        bpm_reportable_n_omitted,
+        bpm_reportable_mae,
+        bpm_reportable_omit_rate,
+        bpm_errors_reportable,
+    ) = _compute_bpm_section(
+        kind="reportable",
+        gt_selector=lambda f: f.bpm_gt_reportable,
+        pred_selector=lambda r: r.bpm_value_rounded,
+        omitted_selector=lambda r: r.bpm_omitted,
+    )
+
+    (
+        bpm_raw_n_total_strict,
+        bpm_raw_n_predicted,
+        bpm_raw_n_omitted,
+        bpm_raw_mae,
+        bpm_raw_omit_rate,
+        bpm_errors_raw,
+    ) = _compute_bpm_section(
+        kind="raw",
+        gt_selector=lambda f: f.bpm_gt_raw,
+        pred_selector=lambda r: r.bpm_raw_value_rounded,
+        omitted_selector=lambda r: r.bpm_raw_omitted,
+    )
+
+    # Family match rate for reportable BPM:
+    # counts a match if pred ~= gt OR pred ~= 2*gt OR pred ~= 0.5*gt (within tolerance).
+    reportable_with_gt = [r for r in bpm_strict_results if r.fixture.bpm_gt_reportable is not None]
+    reportable_predicted = [
+        r for r in reportable_with_gt if (not r.bpm_omitted) and (r.bpm_value_rounded is not None)
+    ]
+
+    def _family_match(pred: float, gt: float) -> bool:
+        return _close(pred, gt) or _close(pred, 2.0 * gt) or _close(2.0 * pred, gt)
+
+    bpm_family_match_rate_reportable = (
+        sum(
+            1
+            for r in reportable_predicted
+            if _family_match(float(r.bpm_value_rounded), float(r.fixture.bpm_gt_reportable))  # type: ignore[arg-type]
+        )
+        / float(len(reportable_predicted))
+        if reportable_predicted
+        else None
+    )
 
     # Sort BPM errors by abs_error descending, take top N
-    bpm_errors_list.sort(key=lambda e: e.abs_error, reverse=True)
-    top_bpm_errors = bpm_errors_list[:top_n_errors]
+    bpm_errors_reportable.sort(key=lambda e: e.abs_error, reverse=True)
+    bpm_errors_raw.sort(key=lambda e: e.abs_error, reverse=True)
+    top_bpm_errors_reportable = bpm_errors_reportable[:top_n_errors]
+    top_bpm_errors_raw = bpm_errors_raw[:top_n_errors]
+
+    # Half/double confusion stats (only where both GT kinds exist and a prediction exists).
+    confusions: list[BpmHalfDoubleConfusion] = []
+
+    for r in bpm_strict_results:
+        if r.bpm_omitted or r.bpm_value_rounded is None:
+            continue
+        raw = r.fixture.bpm_gt_raw
+        rep = r.fixture.bpm_gt_reportable
+        if raw is None or rep is None:
+            continue
+        pred = float(r.bpm_value_rounded)
+
+        # Only consider cases where GTs are approximately related by 2x.
+        is_half_double_pair = _close(float(rep), 2.0 * float(raw)) or _close(
+            float(raw), 2.0 * float(rep)
+        )
+        if not is_half_double_pair:
+            continue
+
+        matches_raw = _close(pred, float(raw))
+        matches_rep = _close(pred, float(rep))
+        if matches_raw and not matches_rep:
+            confusions.append(
+                BpmHalfDoubleConfusion(
+                    path=r.fixture.path,
+                    bpm_gt_raw=float(raw),
+                    bpm_gt_reportable=float(rep),
+                    bpm_pred=int(round(pred)),
+                    relation="pred_matches_raw",
+                    candidates=_candidate_values_rounded(r),
+                    notes=r.fixture.notes,
+                )
+            )
+        elif matches_rep and not matches_raw:
+            confusions.append(
+                BpmHalfDoubleConfusion(
+                    path=r.fixture.path,
+                    bpm_gt_raw=float(raw),
+                    bpm_gt_reportable=float(rep),
+                    bpm_pred=int(round(pred)),
+                    relation="pred_matches_reportable",
+                    candidates=_candidate_values_rounded(r),
+                    notes=r.fixture.notes,
+                )
+            )
+
+    confusions.sort(key=lambda c: c.path)
+    if top_n_confusions >= 0:
+        confusions = confusions[:top_n_confusions]
+    bpm_half_double_confusion_count = len(confusions)
 
     return EvalMetrics(
         total_fixtures=total,
         successful_runs=successful,
         failed_runs=failed,
         skipped_runs=skipped,
-        bpm_n_total_strict=bpm_n_total_strict,
-        bpm_n_predicted=bpm_n_predicted,
-        bpm_n_omitted=bpm_n_omitted,
-        bpm_mae=bpm_mae,
-        bpm_omit_rate=bpm_omit_rate,
-        top_bpm_errors=top_bpm_errors,
+        bpm_reportable_n_total_strict=bpm_reportable_n_total_strict,
+        bpm_reportable_n_predicted=bpm_reportable_n_predicted,
+        bpm_reportable_n_omitted=bpm_reportable_n_omitted,
+        bpm_reportable_mae=bpm_reportable_mae,
+        bpm_reportable_omit_rate=bpm_reportable_omit_rate,
+        bpm_family_match_rate_reportable=bpm_family_match_rate_reportable,
+        bpm_raw_n_total_strict=bpm_raw_n_total_strict,
+        bpm_raw_n_predicted=bpm_raw_n_predicted,
+        bpm_raw_n_omitted=bpm_raw_n_omitted,
+        bpm_raw_mae=bpm_raw_mae,
+        bpm_raw_omit_rate=bpm_raw_omit_rate,
+        top_bpm_errors_reportable=top_bpm_errors_reportable,
+        top_bpm_errors_raw=top_bpm_errors_raw,
+        bpm_half_double_confusion_count=bpm_half_double_confusion_count,
+        bpm_half_double_confusions=confusions,
     )
 
 
@@ -107,13 +232,43 @@ def metrics_to_json(metrics: EvalMetrics) -> dict[str, Any]:
             "failed_runs": metrics.failed_runs,
             "skipped_runs": metrics.skipped_runs,
         },
+        # Back-compat alias: `bpm` matches the old single-GT section (reportable).
         "bpm": {
-            "n_total_strict": metrics.bpm_n_total_strict,
-            "n_predicted": metrics.bpm_n_predicted,
-            "n_omitted": metrics.bpm_n_omitted,
-            "mae": metrics.bpm_mae,
-            "omit_rate": metrics.bpm_omit_rate,
+            "n_total_strict": metrics.bpm_reportable_n_total_strict,
+            "n_predicted": metrics.bpm_reportable_n_predicted,
+            "n_omitted": metrics.bpm_reportable_n_omitted,
+            "mae": metrics.bpm_reportable_mae,
+            "omit_rate": metrics.bpm_reportable_omit_rate,
+            "family_match_rate": metrics.bpm_family_match_rate_reportable,
         },
+        "bpm_reportable": {
+            "n_total_strict": metrics.bpm_reportable_n_total_strict,
+            "n_predicted": metrics.bpm_reportable_n_predicted,
+            "n_omitted": metrics.bpm_reportable_n_omitted,
+            "mae": metrics.bpm_reportable_mae,
+            "omit_rate": metrics.bpm_reportable_omit_rate,
+            "family_match_rate": metrics.bpm_family_match_rate_reportable,
+        },
+        "bpm_raw": {
+            "n_total_strict": metrics.bpm_raw_n_total_strict,
+            "n_predicted": metrics.bpm_raw_n_predicted,
+            "n_omitted": metrics.bpm_raw_n_omitted,
+            "mae": metrics.bpm_raw_mae,
+            "omit_rate": metrics.bpm_raw_omit_rate,
+        },
+        "bpm_half_double_confusions": [
+            {
+                "path": c.path,
+                "bpm_gt_raw": c.bpm_gt_raw,
+                "bpm_gt_reportable": c.bpm_gt_reportable,
+                "bpm_pred": c.bpm_pred,
+                "relation": c.relation,
+                "candidates": c.candidates,
+                "notes": c.notes,
+            }
+            for c in metrics.bpm_half_double_confusions
+        ],
+        "bpm_half_double_confusion_count": metrics.bpm_half_double_confusion_count,
         "key_mode": {
             "n_total_strict": metrics.key_n_total_strict,
             "n_predicted": metrics.key_n_predicted,
@@ -130,7 +285,18 @@ def metrics_to_json(metrics: EvalMetrics) -> dict[str, Any]:
                 "candidates": err.candidates,
                 "notes": err.notes,
             }
-            for err in metrics.top_bpm_errors
+            for err in metrics.top_bpm_errors_reportable
+        ],
+        "top_bpm_errors_raw": [
+            {
+                "path": err.path,
+                "bpm_gt": err.bpm_gt,
+                "bpm_pred": err.bpm_pred,
+                "abs_error": err.abs_error,
+                "candidates": err.candidates,
+                "notes": err.notes,
+            }
+            for err in metrics.top_bpm_errors_raw
         ],
     }
 
@@ -153,24 +319,47 @@ def format_text_report(metrics: EvalMetrics) -> str:
 
     # BPM metrics
     lines.append("BPM Metrics (bpm_strict fixtures only):")
-    lines.append(f"  Total strict: {metrics.bpm_n_total_strict}")
-    lines.append(f"  Predicted: {metrics.bpm_n_predicted}")
-    lines.append(f"  Omitted: {metrics.bpm_n_omitted}")
-    if metrics.bpm_mae is not None:
-        lines.append(f"  MAE: {metrics.bpm_mae:.2f} BPM")
+    lines.append("  Reportable:")
+    lines.append(f"    Total strict: {metrics.bpm_reportable_n_total_strict}")
+    lines.append(f"    Predicted: {metrics.bpm_reportable_n_predicted}")
+    lines.append(f"    Omitted: {metrics.bpm_reportable_n_omitted}")
+    if metrics.bpm_reportable_mae is not None:
+        lines.append(f"    MAE: {metrics.bpm_reportable_mae:.2f} BPM")
     else:
-        lines.append("  MAE: N/A (no predictions with ground truth)")
-    if metrics.bpm_omit_rate is not None:
-        lines.append(f"  Omit rate: {metrics.bpm_omit_rate * 100:.1f}%")
+        lines.append("    MAE: N/A (no predictions with ground truth)")
+    if metrics.bpm_reportable_omit_rate is not None:
+        lines.append(f"    Omit rate: {metrics.bpm_reportable_omit_rate * 100:.1f}%")
     else:
-        lines.append("  Omit rate: N/A")
+        lines.append("    Omit rate: N/A")
+    if metrics.bpm_family_match_rate_reportable is not None:
+        lines.append(
+            f"    Family match rate: {metrics.bpm_family_match_rate_reportable * 100:.1f}%"
+        )
+
+    lines.append("  Raw:")
+    lines.append(f"    Total strict: {metrics.bpm_raw_n_total_strict}")
+    lines.append(f"    Predicted: {metrics.bpm_raw_n_predicted}")
+    lines.append(f"    Omitted: {metrics.bpm_raw_n_omitted}")
+    if metrics.bpm_raw_mae is not None:
+        lines.append(f"    MAE: {metrics.bpm_raw_mae:.2f} BPM")
+    else:
+        lines.append("    MAE: N/A (no predictions with ground truth)")
+    if metrics.bpm_raw_omit_rate is not None:
+        lines.append(f"    Omit rate: {metrics.bpm_raw_omit_rate * 100:.1f}%")
+    else:
+        lines.append("    Omit rate: N/A")
+
+    if metrics.bpm_half_double_confusion_count:
+        lines.append("")
+        lines.append("Half/Double Confusions (raw vs reportable GT):")
+        lines.append(f"  Count: {metrics.bpm_half_double_confusion_count}")
     lines.append("")
 
-    # Top BPM errors
-    if metrics.top_bpm_errors:
-        lines.append(f"Top {len(metrics.top_bpm_errors)} Worst BPM Errors:")
+    # Top BPM errors (reportable)
+    if metrics.top_bpm_errors_reportable:
+        lines.append(f"Top {len(metrics.top_bpm_errors_reportable)} Worst BPM Errors (reportable):")
         lines.append("-" * 80)
-        for i, err in enumerate(metrics.top_bpm_errors, start=1):
+        for i, err in enumerate(metrics.top_bpm_errors_reportable, start=1):
             lines.append(f"{i}. {err.path}")
             lines.append(f"   GT: {err.bpm_gt:.1f} BPM")
             if err.bpm_pred is not None:
@@ -187,6 +376,22 @@ def format_text_report(metrics: EvalMetrics) -> str:
     else:
         lines.append("No BPM errors to report (no predictions with ground truth).")
         lines.append("")
+
+    # Half/double confusions details
+    if metrics.bpm_half_double_confusions:
+        lines.append(f"Top {len(metrics.bpm_half_double_confusions)} Half/Double Confusions:")
+        lines.append("-" * 80)
+        for i, c in enumerate(metrics.bpm_half_double_confusions, start=1):
+            lines.append(f"{i}. {c.path}")
+            lines.append(f"   GT raw: {c.bpm_gt_raw:.1f} BPM")
+            lines.append(f"   GT reportable: {c.bpm_gt_reportable:.1f} BPM")
+            lines.append(f"   Predicted: {c.bpm_pred} BPM ({c.relation})")
+            if c.candidates:
+                cands_str = ", ".join(str(x) for x in c.candidates[:5])
+                lines.append(f"   Candidates: [{cands_str}]")
+            if c.notes:
+                lines.append(f"   Notes: {c.notes}")
+            lines.append("")
 
     lines.append("=" * 80)
     return "\n".join(lines)
