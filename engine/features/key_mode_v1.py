@@ -265,16 +265,28 @@ def extract_key_mode_v1(ctx: FeatureContext, *, config: EngineConfig) -> dict[st
     reason_codes = _ordered_reason_codes(reason_codes)
 
     candidates_out = []
-    for i, ((key, mode), score) in enumerate(scored):
-        candidates_out.append(
-            {
-                "key": key,
-                "mode": mode,
-                "score": float(round(score, 4)),
-                "family": "direct",
-                "rank": i + 1,
-            }
-        )
+    if can_emit_key and (not can_emit_mode):
+        for i, (key, score) in enumerate(scored_key[: max(1, top_n)]):
+            candidates_out.append(
+                {
+                    "key": key,
+                    "mode": None,
+                    "score": float(round(score, 4)),
+                    "family": "key_aggregate",
+                    "rank": i + 1,
+                }
+            )
+    else:
+        for i, ((key, mode), score) in enumerate(scored):
+            candidates_out.append(
+                {
+                    "key": key,
+                    "mode": mode,
+                    "score": float(round(score, 4)),
+                    "family": "direct",
+                    "rank": i + 1,
+                }
+            )
 
     out: dict[str, Any] = {
         "value": None,

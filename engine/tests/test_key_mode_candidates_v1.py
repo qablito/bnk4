@@ -107,6 +107,27 @@ def test_pair_strong_emits_key_and_mode():
     assert out.get("reason_codes") == ["emit_confident"]
 
 
+def test_key_aggregate_wins_but_top_pair_is_different_key():
+    cfg = EngineConfig()
+    out = extract_key_mode_v1(
+        _ctx(
+            duration_seconds=60.0,
+            windows=["A major"] * 4 + ["A minor"] * 4 + ["B major"] * 5,
+        ),
+        config=cfg,
+    )
+    assert out is not None
+    assert out.get("value") == "A"
+    assert out.get("mode") is None
+    assert out.get("reason_codes") == [
+        "mode_withheld_insufficient_evidence",
+        "emit_confident",
+    ]
+    candidates = out.get("candidates") or []
+    assert candidates and candidates[0].get("key") == "A"
+    assert candidates[0].get("mode") is None
+
+
 def test_too_short_audio_omits_even_if_stable():
     cfg = EngineConfig()
     out = extract_key_mode_v1(_ctx(duration_seconds=1.0, windows=["F# minor"] * 4), config=cfg)
