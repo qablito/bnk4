@@ -456,3 +456,42 @@ def test_confusion_matrix_counts_gt_missing_outside_bpm_strict_pool() -> None:
         "pred_matches_neither": 0,
         "gt_missing": 1,
     }
+
+
+def test_compute_metrics_key_mode_strict_metrics_and_confusions() -> None:
+    f1 = _make_fixture("a.wav", key_gt="F#", mode_gt="minor", flags={"key_strict"})
+    f2 = _make_fixture("b.wav", key_gt="G", mode_gt="major", flags={"key_strict"})
+    f3 = _make_fixture("c.wav", key_gt="A", mode_gt="minor", flags={"key_strict"})
+    f4 = _make_fixture("d.wav", key_gt="B", mode_gt="major", flags={"key_strict"})
+
+    r1 = _make_result(f1, bpm_omitted=True)
+    r1.key_value = "F#"
+    r1.mode_value = "minor"
+    r1.key_mode_omitted = False
+
+    r2 = _make_result(f2, bpm_omitted=True)
+    r2.key_value = "G#"
+    r2.mode_value = "major"
+    r2.key_mode_omitted = False
+
+    r3 = _make_result(f3, bpm_omitted=True)
+    r3.key_value = "A"
+    r3.mode_value = "major"
+    r3.key_mode_omitted = False
+
+    r4 = _make_result(f4, bpm_omitted=True)
+    r4.key_mode_omitted = True
+
+    metrics = compute_metrics([r1, r2, r3, r4], bpm_tolerance=1.0)
+    assert metrics.key_n_total_strict == 4
+    assert metrics.key_n_predicted == 3
+    assert metrics.key_n_omitted == 1
+    assert metrics.key_omit_rate == pytest.approx(0.25, abs=1e-6)
+    assert metrics.key_accuracy == pytest.approx(2 / 3, abs=1e-6)
+    assert metrics.key_mode_accuracy == pytest.approx(2 / 3, abs=1e-6)
+    assert metrics.key_both_accuracy == pytest.approx(1 / 3, abs=1e-6)
+    assert metrics.key_confusion_counts == {
+        "wrong_key": 1,
+        "wrong_mode": 1,
+        "both_wrong": 0,
+    }

@@ -215,13 +215,20 @@ def _fixture_debug_rows(results: list[Any]) -> list[dict[str, Any]]:
         fixture = r.fixture
         output = getattr(r, "output", None)
         bpm_block: dict[str, Any] | None = None
+        key_block: dict[str, Any] | None = None
         try:
             if isinstance(output, dict):
                 m = output.get("metrics")
-                if isinstance(m, dict) and isinstance(m.get("bpm"), dict):
-                    bpm_block = m.get("bpm")  # type: ignore[assignment]
+                if isinstance(m, dict):
+                    if isinstance(m.get("bpm"), dict):
+                        bpm_block = m.get("bpm")  # type: ignore[assignment]
+                    if isinstance(m.get("key"), dict):
+                        key_block = m.get("key")  # type: ignore[assignment]
+                    elif isinstance(m.get("key_mode"), dict):
+                        key_block = m.get("key_mode")  # type: ignore[assignment]
         except Exception:
             bpm_block = None
+            key_block = None
 
         # Candidates (top 5 rounded values)
         top_candidates: list[int] = []
@@ -273,11 +280,25 @@ def _fixture_debug_rows(results: list[Any]) -> list[dict[str, Any]]:
             predicted_reason_codes = bpm_block.get("bpm_reason_codes")
             predicted_candidates_structured = bpm_block.get("bpm_candidates")
 
+        predicted_key = None
+        predicted_mode = None
+        predicted_key_confidence = None
+        predicted_key_reason_codes = None
+        predicted_key_candidates = None
+        if key_block is not None:
+            predicted_key = key_block.get("value")
+            predicted_mode = key_block.get("mode")
+            predicted_key_confidence = key_block.get("confidence")
+            predicted_key_reason_codes = key_block.get("reason_codes")
+            predicted_key_candidates = key_block.get("candidates")
+
         rows.append(
             {
                 "path": fixture.path,
                 "bpm_gt_raw": getattr(fixture, "bpm_gt_raw", None),
                 "bpm_gt_reportable": getattr(fixture, "bpm_gt_reportable", None),
+                "key_gt": getattr(fixture, "key_gt", None),
+                "mode_gt": getattr(fixture, "mode_gt", None),
                 "predicted_bpm_value_rounded": getattr(r, "bpm_value_rounded", None),
                 "predicted_bpm_confidence": confidence,
                 "predicted_bpm_raw": predicted_bpm_raw,
@@ -287,6 +308,12 @@ def _fixture_debug_rows(results: list[Any]) -> list[dict[str, Any]]:
                 "predicted_timefeel": predicted_timefeel,
                 "predicted_bpm_reason_codes": predicted_reason_codes,
                 "predicted_bpm_candidates": predicted_candidates_structured,
+                "predicted_key": predicted_key,
+                "predicted_mode": predicted_mode,
+                "predicted_key_confidence": predicted_key_confidence,
+                "predicted_key_reason_codes": predicted_key_reason_codes,
+                "predicted_key_candidates": predicted_key_candidates,
+                "key_omitted": getattr(r, "key_mode_omitted", True),
                 "top_candidates_rounded": top_candidates,
                 "bpm_omitted": omitted,
                 "omitted_due_to_confidence": omitted_due_to_confidence,

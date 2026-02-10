@@ -193,22 +193,37 @@ def _extract_bpm(result: PredictionResult, metrics: dict) -> None:
 
 def _extract_key_mode(result: PredictionResult, metrics: dict) -> None:
     """Extract key/mode prediction from metrics."""
-    if "key_mode" not in metrics:
+    km_block = metrics.get("key")
+    if not isinstance(km_block, dict):
+        km_block = metrics.get("key_mode")
+    if not isinstance(km_block, dict):
         result.key_mode_omitted = True
         return
 
-    km_block = metrics["key_mode"]
     if km_block.get("locked"):
         result.key_mode_omitted = True
         return
 
-    val = km_block.get("value")
-    if val is None or not isinstance(val, dict):
-        result.key_mode_omitted = True
-        return
+    cands = km_block.get("candidates")
+    if isinstance(cands, list):
+        result.key_candidates = cands
 
-    result.key_value = val.get("key")
-    result.mode_value = val.get("mode")
+    # v1 canonical block: value="F#", mode="minor".
+    # Back-compat accepts nested value={"key":"F#","mode":"minor"}.
+    val = km_block.get("value")
+    if isinstance(val, str):
+        result.key_value = val
+        mode_val = km_block.get("mode")
+        result.mode_value = str(mode_val) if isinstance(mode_val, str) else None
+    elif isinstance(val, dict):
+        key_val = val.get("key")
+        mode_val = val.get("mode")
+        result.key_value = str(key_val) if isinstance(key_val, str) else None
+        result.mode_value = str(mode_val) if isinstance(mode_val, str) else None
+    else:
+        result.key_value = None
+        result.mode_value = None
+
     result.key_mode_omitted = result.key_value is None
 
 

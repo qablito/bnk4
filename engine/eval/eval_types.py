@@ -85,6 +85,7 @@ class PredictionResult:
     # Extracted key/mode predictions (for future use)
     key_value: str | None = None
     mode_value: str | None = None
+    key_candidates: list[dict[str, Any]] | None = None
     key_mode_omitted: bool = True
 
 
@@ -113,6 +114,20 @@ class BpmHalfDoubleConfusion:
     bpm_pred: int
     relation: Literal["pred_matches_raw", "pred_matches_reportable"]
     candidates: list[int] | None
+    notes: str
+
+
+@dataclass
+class KeyModeError:
+    """Key/mode prediction error detail."""
+
+    path: str
+    key_gt: str
+    mode_gt: str
+    key_pred: str | None
+    mode_pred: str | None
+    mismatch: Literal["wrong_key", "wrong_mode", "both_wrong"]
+    candidates: list[dict[str, Any]] | None
     notes: str
 
 
@@ -157,4 +172,8 @@ class EvalMetrics:
     key_n_predicted: int = 0
     key_n_omitted: int = 0
     key_accuracy: float | None = None
+    key_mode_accuracy: float | None = None
+    key_both_accuracy: float | None = None
     key_omit_rate: float | None = None
+    key_confusion_counts: dict[str, int] = field(default_factory=dict)
+    top_key_mode_errors: list[KeyModeError] = field(default_factory=list)

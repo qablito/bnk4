@@ -126,6 +126,7 @@ def test_json_report_stable_keys() -> None:
         "key_mode",
         "top_bpm_errors",
         "top_bpm_errors_raw",
+        "top_key_mode_errors",
     }
     assert set(report["overall"].keys()) == {
         "total_fixtures",

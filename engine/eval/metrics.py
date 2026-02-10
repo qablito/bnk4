@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from engine.eval.eval_types import BpmError, BpmHalfDoubleConfusion, EvalMetrics, PredictionResult
+from engine.eval.eval_types import (
+    BpmError,
+    BpmHalfDoubleConfusion,
+    EvalMetrics,
+    KeyModeError,
+    PredictionResult,
+)
 
 
 def compute_metrics(
@@ -244,6 +250,76 @@ def compute_metrics(
         confusions = confusions[:top_n_confusions]
     bpm_half_double_confusion_count = len(confusions)
 
+    # Key/mode strict metrics.
+    key_strict_results = [
+        r
+        for r in results
+        if r.success
+        and not r.skipped
+        and r.fixture.is_key_strict
+        and r.fixture.key_gt is not None
+        and r.fixture.mode_gt is not None
+    ]
+    key_n_total_strict = len(key_strict_results)
+    key_predicted_rows = [
+        r
+        for r in key_strict_results
+        if (not r.key_mode_omitted) and (r.key_value is not None) and (r.mode_value is not None)
+    ]
+    key_n_predicted = len(key_predicted_rows)
+    key_n_omitted = key_n_total_strict - key_n_predicted
+    key_omit_rate = (key_n_omitted / float(key_n_total_strict)) if key_n_total_strict > 0 else None
+
+    key_correct_count = 0
+    mode_correct_count = 0
+    both_correct_count = 0
+    key_errors: list[KeyModeError] = []
+    key_confusion_counts = {
+        "wrong_key": 0,
+        "wrong_mode": 0,
+        "both_wrong": 0,
+    }
+    for r in key_predicted_rows:
+        key_gt = str(r.fixture.key_gt)
+        mode_gt = str(r.fixture.mode_gt).lower()
+        key_pred = str(r.key_value)
+        mode_pred = str(r.mode_value).lower()
+        key_ok = key_pred == key_gt
+        mode_ok = mode_pred == mode_gt
+        if key_ok:
+            key_correct_count += 1
+        if mode_ok:
+            mode_correct_count += 1
+        if key_ok and mode_ok:
+            both_correct_count += 1
+            continue
+
+        if (not key_ok) and mode_ok:
+            mismatch = "wrong_key"
+        elif key_ok and (not mode_ok):
+            mismatch = "wrong_mode"
+        else:
+            mismatch = "both_wrong"
+        key_confusion_counts[mismatch] += 1
+        key_errors.append(
+            KeyModeError(
+                path=r.fixture.path,
+                key_gt=key_gt,
+                mode_gt=mode_gt,
+                key_pred=key_pred,
+                mode_pred=mode_pred,
+                mismatch=mismatch,
+                candidates=r.key_candidates,
+                notes=r.fixture.notes,
+            )
+        )
+
+    key_accuracy = key_correct_count / float(key_n_predicted) if key_n_predicted > 0 else None
+    key_mode_accuracy = mode_correct_count / float(key_n_predicted) if key_n_predicted > 0 else None
+    key_both_accuracy = both_correct_count / float(key_n_predicted) if key_n_predicted > 0 else None
+    key_errors.sort(key=lambda e: e.path)
+    top_key_mode_errors = key_errors[: max(0, int(top_n_errors))]
+
     return EvalMetrics(
         total_fixtures=total,
         successful_runs=successful,
@@ -267,6 +343,15 @@ def compute_metrics(
         bpm_half_double_confusion_count=bpm_half_double_confusion_count,
         bpm_half_double_confusions=confusions,
         bpm_half_double_confusion_matrix=confusion_matrix,
+        key_n_total_strict=key_n_total_strict,
+        key_n_predicted=key_n_predicted,
+        key_n_omitted=key_n_omitted,
+        key_accuracy=key_accuracy,
+        key_mode_accuracy=key_mode_accuracy,
+        key_both_accuracy=key_both_accuracy,
+        key_omit_rate=key_omit_rate,
+        key_confusion_counts=key_confusion_counts,
+        top_key_mode_errors=top_key_mode_errors,
     )
 
 
@@ -325,8 +410,13 @@ def metrics_to_json(metrics: EvalMetrics) -> dict[str, Any]:
             "n_total_strict": metrics.key_n_total_strict,
             "n_predicted": metrics.key_n_predicted,
             "n_omitted": metrics.key_n_omitted,
-            "accuracy": metrics.key_accuracy,
+            # Back-compat alias: "accuracy" now means both key+mode correct.
+            "accuracy": metrics.key_both_accuracy,
+            "accuracy_key": metrics.key_accuracy,
+            "accuracy_mode": metrics.key_mode_accuracy,
+            "accuracy_both": metrics.key_both_accuracy,
             "omit_rate": metrics.key_omit_rate,
+            "confusion_counts": dict(sorted(metrics.key_confusion_counts.items())),
         },
         "top_bpm_errors": [
             {
@@ -349,6 +439,19 @@ def metrics_to_json(metrics: EvalMetrics) -> dict[str, Any]:
                 "notes": err.notes,
             }
             for err in metrics.top_bpm_errors_raw
+        ],
+        "top_key_mode_errors": [
+            {
+                "path": err.path,
+                "key_gt": err.key_gt,
+                "mode_gt": err.mode_gt,
+                "key_pred": err.key_pred,
+                "mode_pred": err.mode_pred,
+                "mismatch": err.mismatch,
+                "candidates": err.candidates,
+                "notes": err.notes,
+            }
+            for err in metrics.top_key_mode_errors
         ],
     }
 
@@ -416,6 +519,59 @@ def format_text_report(metrics: EvalMetrics) -> str:
             for k, v in metrics.bpm_half_double_confusion_matrix.items():
                 lines.append(f"    - {k}: {v}")
     lines.append("")
+
+    # Key/mode metrics
+    lines.append("Key/Mode Metrics (key_strict fixtures only):")
+    lines.append(f"  Total strict: {metrics.key_n_total_strict}")
+    lines.append(f"  Predicted: {metrics.key_n_predicted}")
+    lines.append(f"  Omitted: {metrics.key_n_omitted}")
+    if metrics.key_omit_rate is not None:
+        lines.append(f"  Omit rate: {metrics.key_omit_rate * 100:.1f}%")
+    else:
+        lines.append("  Omit rate: N/A")
+    if metrics.key_accuracy is not None:
+        lines.append(f"  Accuracy (key): {metrics.key_accuracy * 100:.1f}%")
+    else:
+        lines.append("  Accuracy (key): N/A")
+    if metrics.key_mode_accuracy is not None:
+        lines.append(f"  Accuracy (mode): {metrics.key_mode_accuracy * 100:.1f}%")
+    else:
+        lines.append("  Accuracy (mode): N/A")
+    if metrics.key_both_accuracy is not None:
+        lines.append(f"  Accuracy (both): {metrics.key_both_accuracy * 100:.1f}%")
+    else:
+        lines.append("  Accuracy (both): N/A")
+    if metrics.key_confusion_counts:
+        lines.append("  Confusions:")
+        for k, v in sorted(metrics.key_confusion_counts.items()):
+            lines.append(f"    - {k}: {v}")
+    lines.append("")
+
+    if metrics.top_key_mode_errors:
+        lines.append(f"Top {len(metrics.top_key_mode_errors)} Worst Key/Mode Errors:")
+        lines.append("-" * 80)
+        for i, err in enumerate(metrics.top_key_mode_errors, start=1):
+            lines.append(f"{i}. {err.path}")
+            lines.append(f"   GT: {err.key_gt} {err.mode_gt}")
+            lines.append(f"   Predicted: {err.key_pred or '—'} {err.mode_pred or '—'}")
+            lines.append(f"   Mismatch: {err.mismatch}")
+            if err.candidates:
+                cands = []
+                for c in err.candidates[:5]:
+                    if isinstance(c, dict):
+                        key = c.get("key")
+                        mode = c.get("mode")
+                        score = c.get("score")
+                        if key and mode:
+                            if isinstance(score, (int, float)):
+                                cands.append(f"{key} {mode} ({float(score):.3f})")
+                            else:
+                                cands.append(f"{key} {mode}")
+                if cands:
+                    lines.append(f"   Candidates: [{', '.join(cands)}]")
+            if err.notes:
+                lines.append(f"   Notes: {err.notes}")
+            lines.append("")
 
     # Top BPM errors (reportable)
     if metrics.top_bpm_errors_reportable:
