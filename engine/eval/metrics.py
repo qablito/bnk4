@@ -252,23 +252,33 @@ def compute_metrics(
 
     # Key/mode strict metrics.
     key_strict_results = [
-        r
-        for r in results
-        if r.success
-        and not r.skipped
-        and r.fixture.is_key_strict
-        and r.fixture.key_gt is not None
-        and r.fixture.mode_gt is not None
+        r for r in results if r.success and not r.skipped and r.fixture.is_key_strict
     ]
-    key_n_total_strict = len(key_strict_results)
+    key_with_gt = [r for r in key_strict_results if r.fixture.key_gt is not None]
+    mode_with_gt = [r for r in key_with_gt if r.fixture.mode_gt is not None]
+
+    key_n_total_strict = len(key_with_gt)
     key_predicted_rows = [
-        r
-        for r in key_strict_results
-        if (not r.key_mode_omitted) and (r.key_value is not None) and (r.mode_value is not None)
+        r for r in key_with_gt if (not r.key_mode_omitted) and (r.key_value is not None)
     ]
     key_n_predicted = len(key_predicted_rows)
     key_n_omitted = key_n_total_strict - key_n_predicted
     key_omit_rate = (key_n_omitted / float(key_n_total_strict)) if key_n_total_strict > 0 else None
+
+    mode_n_total_strict = len(mode_with_gt)
+    mode_predicted_rows = [
+        r
+        for r in mode_with_gt
+        if (not r.key_mode_omitted) and (r.key_value is not None) and (r.mode_value is not None)
+    ]
+    mode_n_predicted = len(mode_predicted_rows)
+    mode_n_omitted = mode_n_total_strict - mode_n_predicted
+    mode_omit_rate = (
+        mode_n_omitted / float(mode_n_total_strict) if mode_n_total_strict > 0 else None
+    )
+    mode_withheld_count = sum(
+        1 for r in mode_with_gt if (r.key_value is not None) and (r.mode_value is None)
+    )
 
     key_correct_count = 0
     mode_correct_count = 0
@@ -279,15 +289,20 @@ def compute_metrics(
         "wrong_mode": 0,
         "both_wrong": 0,
     }
+
     for r in key_predicted_rows:
+        key_gt = str(r.fixture.key_gt)
+        key_pred = str(r.key_value)
+        if key_pred == key_gt:
+            key_correct_count += 1
+
+    for r in mode_predicted_rows:
         key_gt = str(r.fixture.key_gt)
         mode_gt = str(r.fixture.mode_gt).lower()
         key_pred = str(r.key_value)
         mode_pred = str(r.mode_value).lower()
         key_ok = key_pred == key_gt
         mode_ok = mode_pred == mode_gt
-        if key_ok:
-            key_correct_count += 1
         if mode_ok:
             mode_correct_count += 1
         if key_ok and mode_ok:
@@ -315,8 +330,12 @@ def compute_metrics(
         )
 
     key_accuracy = key_correct_count / float(key_n_predicted) if key_n_predicted > 0 else None
-    key_mode_accuracy = mode_correct_count / float(key_n_predicted) if key_n_predicted > 0 else None
-    key_both_accuracy = both_correct_count / float(key_n_predicted) if key_n_predicted > 0 else None
+    key_mode_accuracy = (
+        mode_correct_count / float(mode_n_predicted) if mode_n_predicted > 0 else None
+    )
+    key_both_accuracy = (
+        both_correct_count / float(mode_n_predicted) if mode_n_predicted > 0 else None
+    )
     key_errors.sort(key=lambda e: e.path)
     top_key_mode_errors = key_errors[: max(0, int(top_n_errors))]
 
@@ -350,6 +369,11 @@ def compute_metrics(
         key_mode_accuracy=key_mode_accuracy,
         key_both_accuracy=key_both_accuracy,
         key_omit_rate=key_omit_rate,
+        mode_n_total_strict=mode_n_total_strict,
+        mode_n_predicted=mode_n_predicted,
+        mode_n_omitted=mode_n_omitted,
+        mode_omit_rate=mode_omit_rate,
+        mode_withheld_count=mode_withheld_count,
         key_confusion_counts=key_confusion_counts,
         top_key_mode_errors=top_key_mode_errors,
     )
@@ -416,6 +440,11 @@ def metrics_to_json(metrics: EvalMetrics) -> dict[str, Any]:
             "accuracy_mode": metrics.key_mode_accuracy,
             "accuracy_both": metrics.key_both_accuracy,
             "omit_rate": metrics.key_omit_rate,
+            "mode_n_total_strict": metrics.mode_n_total_strict,
+            "mode_n_predicted": metrics.mode_n_predicted,
+            "mode_n_omitted": metrics.mode_n_omitted,
+            "mode_omit_rate": metrics.mode_omit_rate,
+            "mode_withheld_count": metrics.mode_withheld_count,
             "confusion_counts": dict(sorted(metrics.key_confusion_counts.items())),
         },
         "top_bpm_errors": [
@@ -529,6 +558,14 @@ def format_text_report(metrics: EvalMetrics) -> str:
         lines.append(f"  Omit rate: {metrics.key_omit_rate * 100:.1f}%")
     else:
         lines.append("  Omit rate: N/A")
+    lines.append(f"  Mode total strict: {metrics.mode_n_total_strict}")
+    lines.append(f"  Mode predicted: {metrics.mode_n_predicted}")
+    lines.append(f"  Mode omitted: {metrics.mode_n_omitted}")
+    lines.append(f"  Mode withheld: {metrics.mode_withheld_count}")
+    if metrics.mode_omit_rate is not None:
+        lines.append(f"  Mode omit rate: {metrics.mode_omit_rate * 100:.1f}%")
+    else:
+        lines.append("  Mode omit rate: N/A")
     if metrics.key_accuracy is not None:
         lines.append(f"  Accuracy (key): {metrics.key_accuracy * 100:.1f}%")
     else:

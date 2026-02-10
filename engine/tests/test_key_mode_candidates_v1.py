@@ -171,6 +171,17 @@ def test_candidates_order_is_deterministic_on_ties() -> None:
     ]
 
 
+def test_output_deterministic_across_window_order() -> None:
+    cfg = EngineConfig()
+    windows = ["A major"] * 3 + ["A minor"] * 3 + ["B major"] * 4
+    out1 = extract_key_mode_v1(_ctx(duration_seconds=60.0, windows=windows), config=cfg)
+    out2 = extract_key_mode_v1(
+        _ctx(duration_seconds=60.0, windows=list(reversed(windows))),
+        config=cfg,
+    )
+    assert out1 == out2
+
+
 def test_guest_gating_strips_candidate_metadata_and_confidence():
     audio = DecodedAudio(sample_rate_hz=44100, channels=2, duration_seconds=30.0)
     out = run_analysis_v1(
@@ -190,6 +201,23 @@ def test_guest_gating_strips_candidate_metadata_and_confidence():
     assert "confidence" not in km_legacy
     assert "reason_codes" not in km_legacy
     assert "candidates" not in km_legacy
+
+
+def test_guest_gating_mode_withheld_preserves_basic_only():
+    audio = DecodedAudio(sample_rate_hz=44100, channels=2, duration_seconds=30.0)
+    out = run_analysis_v1(
+        audio,
+        "guest",
+        config=EngineConfig(),
+        _test_overrides={"key_mode_hint_windows": ["A major"] * 3 + ["A minor"] * 2},
+    )
+
+    km = out["metrics"]["key"]
+    assert km.get("value") == "A"
+    assert km.get("mode") is None
+    assert "confidence" not in km
+    assert "reason_codes" not in km
+    assert "candidates" not in km
 
 
 def test_free_gating_keeps_advanced_key_fields():

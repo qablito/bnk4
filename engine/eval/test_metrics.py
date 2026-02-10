@@ -495,3 +495,38 @@ def test_compute_metrics_key_mode_strict_metrics_and_confusions() -> None:
         "wrong_mode": 1,
         "both_wrong": 0,
     }
+
+
+def test_compute_metrics_key_mode_coverage_and_withheld_counts() -> None:
+    f1 = _make_fixture("a.wav", key_gt="A", mode_gt="minor", flags={"key_strict"})
+    f2 = _make_fixture("b.wav", key_gt="B", mode_gt="major", flags={"key_strict"})
+    f3 = _make_fixture("c.wav", key_gt="C", mode_gt="major", flags={"key_strict"})
+
+    r1 = _make_result(f1, bpm_omitted=True)
+    r1.key_value = "A"
+    r1.mode_value = None
+    r1.key_mode_omitted = False
+
+    r2 = _make_result(f2, bpm_omitted=True)
+    r2.key_value = "B"
+    r2.mode_value = "major"
+    r2.key_mode_omitted = False
+
+    r3 = _make_result(f3, bpm_omitted=True)
+    r3.key_value = None
+    r3.mode_value = None
+    r3.key_mode_omitted = True
+
+    metrics = compute_metrics([r1, r2, r3], bpm_tolerance=1.0)
+    assert metrics.key_n_total_strict == 3
+    assert metrics.key_n_predicted == 2
+    assert metrics.key_n_omitted == 1
+    assert metrics.key_accuracy == pytest.approx(1.0, abs=1e-6)
+
+    assert metrics.mode_n_total_strict == 3
+    assert metrics.mode_n_predicted == 1
+    assert metrics.mode_n_omitted == 2
+    assert metrics.mode_withheld_count == 1
+    assert metrics.mode_omit_rate == pytest.approx(2 / 3, abs=1e-6)
+    assert metrics.key_mode_accuracy == pytest.approx(1.0, abs=1e-6)
+    assert metrics.key_both_accuracy == pytest.approx(1.0, abs=1e-6)

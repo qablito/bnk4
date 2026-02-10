@@ -175,5 +175,10 @@ class EvalMetrics:
     key_mode_accuracy: float | None = None
     key_both_accuracy: float | None = None
     key_omit_rate: float | None = None
+    mode_n_total_strict: int = 0
+    mode_n_predicted: int = 0
+    mode_n_omitted: int = 0
+    mode_omit_rate: float | None = None
+    mode_withheld_count: int = 0
     key_confusion_counts: dict[str, int] = field(default_factory=dict)
     top_key_mode_errors: list[KeyModeError] = field(default_factory=list)
