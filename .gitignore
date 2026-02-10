@@ -50,3 +50,6 @@ cat >> .gitignore <<'EOF'
 # python
 __pycache__/
 *.pyc
+
+# Local DAW / analysis artifacts
+*.asd
