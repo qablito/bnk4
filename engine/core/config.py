@@ -19,6 +19,21 @@ class EngineV1Tunables:
     # Omit thresholds (global, applies to all roles)
     bpm_min_confidence_omit: float = 0.35
     key_mode_min_confidence_omit: float = 0.45
+    # Key/mode weak-evidence emission:
+    # Allow medium-confidence emit when harmony is very consistent but overall
+    # confidence is low due to short duration / sparse evidence.
+    key_mode_weak_emit_stability_min: float = 0.75
+    key_mode_weak_emit_min_duration_seconds: float = 2.0
+    # Key-only weak-evidence emission (preferred for new policy).
+    key_weak_emit_stability_min: float = 0.75
+    key_weak_emit_min_duration_seconds: float = 2.0
+
+    # Key/mode policy thresholds
+    key_emit_gap_min_medium: float = 0.20
+    key_emit_gap_min_high: float = 0.30
+    key_mode_top2_ambiguity_threshold: float = 0.15
+    mode_emit_pair_stability_min: float = 0.90
+    mode_emit_pair_gap_min: float = 0.25
 
     # Tempo candidates (half/double)
     tempo_half_double_delta_max: float = 0.08

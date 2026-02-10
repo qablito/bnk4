@@ -14,6 +14,8 @@ _MODE_INDEX = {m: i for i, m in enumerate(_MODE_ORDER)}
 _REASON_CODE_ORDER = [
     "omitted_ambiguous_runnerup",
     "omitted_low_confidence",
+    "mode_withheld_insufficient_evidence",
+    "emit_consistent_weak_evidence",
     "emit_confident",
 ]
 
@@ -87,12 +89,48 @@ def _confidence_level(
     duration_seconds: float,
     config: EngineConfig,
 ) -> str:
-    gap_med = float(getattr(config.tunables, "key_mode_gap_min_medium", 0.20))
-    gap_high = float(getattr(config.tunables, "key_mode_gap_min_high", 0.30))
-    stab_med = float(getattr(config.tunables, "key_mode_stability_min_medium", 0.60))
-    stab_high = float(getattr(config.tunables, "key_mode_stability_min_high", 0.75))
-    min_dur_med = float(getattr(config.tunables, "key_mode_min_duration_seconds_medium", 4.0))
-    min_dur_high = float(getattr(config.tunables, "key_mode_min_duration_seconds_high", 6.0))
+    gap_med = float(
+        getattr(
+            config.tunables,
+            "key_emit_gap_min_medium",
+            getattr(config.tunables, "key_mode_gap_min_medium", 0.20),
+        )
+    )
+    gap_high = float(
+        getattr(
+            config.tunables,
+            "key_emit_gap_min_high",
+            getattr(config.tunables, "key_mode_gap_min_high", 0.30),
+        )
+    )
+    stab_med = float(
+        getattr(
+            config.tunables,
+            "key_emit_stability_min_medium",
+            getattr(config.tunables, "key_mode_stability_min_medium", 0.60),
+        )
+    )
+    stab_high = float(
+        getattr(
+            config.tunables,
+            "key_emit_stability_min_high",
+            getattr(config.tunables, "key_mode_stability_min_high", 0.75),
+        )
+    )
+    min_dur_med = float(
+        getattr(
+            config.tunables,
+            "key_emit_min_duration_seconds_medium",
+            getattr(config.tunables, "key_mode_min_duration_seconds_medium", 4.0),
+        )
+    )
+    min_dur_high = float(
+        getattr(
+            config.tunables,
+            "key_emit_min_duration_seconds_high",
+            getattr(config.tunables, "key_mode_min_duration_seconds_high", 6.0),
+        )
+    )
 
     if duration_seconds >= min_dur_high and score_gap >= gap_high and stability >= stab_high:
         return "high"
@@ -145,26 +183,65 @@ def extract_key_mode_v1(ctx: FeatureContext, *, config: EngineConfig) -> dict[st
         )
     )
 
+    counts_key: dict[str, int] = {}
+    for (key, _mode), count in counts.items():
+        counts_key[key] = counts_key.get(key, 0) + count
+    scored_key = [(k, counts_key[k] / float(len(windows))) for k in counts_key]
+    scored_key.sort(key=lambda t: (-t[1], _KEY_INDEX.get(t[0], 999)))
+
     top_n = int(getattr(config.tunables, "key_mode_candidates_top_n", 5))
     scored = scored[: max(1, top_n)]
 
     s1 = scored[0][1]
     s2 = scored[1][1] if len(scored) > 1 else 0.0
-    gap = float(s1 - s2)
-    stability = float(s1)
+    pair_gap = float(s1 - s2)
+    pair_stability = float(s1)
+
+    key_s1 = scored_key[0][1]
+    key_s2 = scored_key[1][1] if len(scored_key) > 1 else 0.0
+    key_gap = float(key_s1 - key_s2)
+    key_stability = float(key_s1)
     duration_seconds = float(getattr(ctx.audio, "duration_seconds", 0.0) or 0.0)
 
-    confidence = _confidence_level(
-        score_gap=gap,
-        stability=stability,
+    key_confidence = _confidence_level(
+        score_gap=key_gap,
+        stability=key_stability,
         duration_seconds=duration_seconds,
         config=config,
     )
 
-    ambiguous_gap = float(getattr(config.tunables, "key_mode_ambiguous_gap_max", 0.15))
-    ambiguous_runner_up = bool(len(scored) > 1 and gap < ambiguous_gap)
+    ambiguous_gap = float(getattr(config.tunables, "key_mode_top2_ambiguity_threshold", 0.15))
+    pair_ambiguous = bool(len(scored) > 1 and pair_gap < ambiguous_gap)
+    key_ambiguous = bool(len(scored_key) > 1 and key_gap < ambiguous_gap)
 
-    if confidence == "low":
+    weak_emit_stability_min = float(
+        getattr(
+            config.tunables,
+            "key_weak_emit_stability_min",
+            getattr(config.tunables, "key_mode_weak_emit_stability_min", 0.90),
+        )
+    )
+    weak_emit_min_duration_seconds = float(
+        getattr(
+            config.tunables,
+            "key_weak_emit_min_duration_seconds",
+            getattr(config.tunables, "key_mode_weak_emit_min_duration_seconds", 2.0),
+        )
+    )
+    emit_with_weak_evidence = bool(
+        key_confidence == "low"
+        and (not key_ambiguous)
+        and key_stability >= weak_emit_stability_min
+        and duration_seconds >= weak_emit_min_duration_seconds
+    )
+    effective_confidence = "medium" if emit_with_weak_evidence else key_confidence
+    can_emit_key = bool(effective_confidence != "low" and (not key_ambiguous))
+    mode_stability_min = float(getattr(config.tunables, "mode_emit_pair_stability_min", 0.90))
+    mode_gap_min = float(getattr(config.tunables, "mode_emit_pair_gap_min", 0.25))
+    mode_evidence_ok = bool(pair_stability >= mode_stability_min and pair_gap >= mode_gap_min)
+    can_emit_mode = bool(can_emit_key and mode_evidence_ok and (not pair_ambiguous))
+
+    if effective_confidence == "low":
         hooks.emit(
             "feature_omitted",
             feature="key_mode",
@@ -173,10 +250,16 @@ def extract_key_mode_v1(ctx: FeatureContext, *, config: EngineConfig) -> dict[st
         )
 
     reason_codes: list[str] = []
-    if ambiguous_runner_up:
+    if (not can_emit_key) and key_ambiguous:
         reason_codes.append("omitted_ambiguous_runnerup")
-    if confidence == "low":
+    if (not can_emit_key) and effective_confidence == "low":
         reason_codes.append("omitted_low_confidence")
+    if emit_with_weak_evidence:
+        reason_codes.append("emit_consistent_weak_evidence")
+    if can_emit_key and (not can_emit_mode):
+        reason_codes.append("mode_withheld_insufficient_evidence")
+    if can_emit_key and (not emit_with_weak_evidence):
+        reason_codes.append("emit_confident")
     if not reason_codes:
         reason_codes.append("emit_confident")
     reason_codes = _ordered_reason_codes(reason_codes)
@@ -196,14 +279,15 @@ def extract_key_mode_v1(ctx: FeatureContext, *, config: EngineConfig) -> dict[st
     out: dict[str, Any] = {
         "value": None,
         "mode": None,
-        "confidence": confidence,
+        "confidence": effective_confidence,
         "reason_codes": reason_codes,
         "candidates": candidates_out,
         "method": "key_mode_global_v1",
     }
 
-    if confidence != "low" and not ambiguous_runner_up:
-        out["value"] = scored[0][0][0]
+    if can_emit_key:
+        out["value"] = scored_key[0][0]
+    if can_emit_mode:
         out["mode"] = scored[0][0][1]
 
     return out

@@ -49,9 +49,67 @@ def test_multiple_keys_score_similarly_omits_value():
     assert out.get("reason_codes") == ["omitted_ambiguous_runnerup", "omitted_low_confidence"]
 
 
-def test_short_audio_is_low_confidence_and_omits_value_even_if_stable():
+def test_short_audio_stable_can_emit_with_medium_confidence_when_not_ambiguous():
     cfg = EngineConfig()
     out = extract_key_mode_v1(_ctx(duration_seconds=3.0, windows=["F# minor"] * 4), config=cfg)
+    assert out is not None
+    assert out.get("confidence") == "medium"
+    assert out.get("value") == "F#"
+    assert out.get("mode") == "minor"
+    assert out.get("reason_codes") == ["emit_consistent_weak_evidence"]
+
+
+def test_short_audio_mostly_stable_emits_with_medium_confidence():
+    cfg = EngineConfig()
+    out = extract_key_mode_v1(
+        _ctx(duration_seconds=3.0, windows=["F# minor"] * 3 + ["A major"]),
+        config=cfg,
+    )
+    assert out is not None
+    assert out.get("confidence") == "medium"
+    assert out.get("value") == "F#"
+    assert out.get("mode") is None
+    assert out.get("reason_codes") == [
+        "mode_withheld_insufficient_evidence",
+        "emit_consistent_weak_evidence",
+    ]
+
+
+def test_key_emits_when_mode_is_ambiguous():
+    cfg = EngineConfig()
+    out = extract_key_mode_v1(
+        _ctx(
+            duration_seconds=60.0,
+            windows=["A major"] * 3 + ["A minor"] * 2,
+        ),
+        config=cfg,
+    )
+    assert out is not None
+    assert out.get("value") == "A"
+    assert out.get("mode") is None
+    assert out.get("confidence") in ("medium", "high")
+    assert out.get("reason_codes") == [
+        "mode_withheld_insufficient_evidence",
+        "emit_confident",
+    ]
+
+
+def test_pair_strong_emits_key_and_mode():
+    cfg = EngineConfig()
+    out = extract_key_mode_v1(
+        _ctx(duration_seconds=60.0, windows=["A major"] * 4),
+        config=cfg,
+    )
+    assert out is not None
+    assert out.get("value") == "A"
+    assert out.get("mode") == "major"
+    assert out.get("confidence") in ("medium", "high")
+    assert out.get("reason_codes") == ["emit_confident"]
+
+
+def test_too_short_audio_omits_even_if_stable():
+    cfg = EngineConfig()
+    out = extract_key_mode_v1(_ctx(duration_seconds=1.0, windows=["F# minor"] * 4), config=cfg)
     assert out is not None
     assert out.get("confidence") == "low"
     assert out.get("value") is None
