@@ -53,3 +53,6 @@ __pycache__/
 
 # Local DAW / analysis artifacts
 *.asd
+
+# Local DAW / analysis artifacts
+*.asd
