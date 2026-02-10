@@ -20,6 +20,8 @@ class DecodedAudio:
     channels: int
     duration_seconds: float
     format: AudioFormat = "unknown"
+    codec: str | None = None
+    container: str | None = None
 
     # Reserved for v2 / real decoding
     peak_dbfs: float | None = None

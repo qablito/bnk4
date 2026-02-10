@@ -27,9 +27,11 @@ def test_guest_metrics_deep_strip_confidence_and_evidence():
                 "candidates": [{"rank": 1, "value": 70}],
             },
             "key_mode": {
-                "value": {"tonic": "F#", "mode": "minor", "confidence": 0.3},
+                "value": "F#",
+                "mode": "minor",
                 "confidence": 0.88,
                 "candidates": [{"rank": 1, "value": "F# minor"}],
+                "reason_codes": ["emit_confident"],
             },
         },
     }
@@ -55,6 +57,7 @@ def test_guest_metrics_deep_strip_confidence_and_evidence():
     # Explicit rule
     assert "value_exact" not in bpm.get("value", {})
 
-    # Candidates preserved
+    # BPM candidates preserved, key candidates stripped for guest minimal contract.
     assert bpm.get("candidates") == [{"rank": 1, "value": 70}]
-    assert km.get("candidates") == [{"rank": 1, "value": "F# minor"}]
+    assert "candidates" not in km
+    assert "reason_codes" not in km

@@ -82,6 +82,8 @@ def test_decode_mp3_success_uses_temp_wav_and_preserves_format(
 
     audio = decode_input_path_v1(p)
     assert audio.format == "mp3"
+    assert audio.codec == "mp3"
+    assert audio.container == "mp3"
     assert audio.channels == 2
     assert audio.sample_rate_hz == 44100
     assert audio.duration_seconds > 0

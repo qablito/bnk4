@@ -30,7 +30,8 @@ def test_weak_harmonic_content_is_low_confidence_and_omits_value():
     )
     assert out is not None
     assert out.get("confidence") == "low"
-    assert "value" not in out
+    assert out.get("value") is None
+    assert out.get("mode") is None
     assert isinstance(out.get("candidates"), list)
     assert len(out["candidates"]) >= 2
 
@@ -43,7 +44,9 @@ def test_multiple_keys_score_similarly_omits_value():
     )
     assert out is not None
     assert out.get("confidence") == "low"
-    assert "value" not in out
+    assert out.get("value") is None
+    assert out.get("mode") is None
+    assert out.get("reason_codes") == ["omitted_ambiguous_runnerup", "omitted_low_confidence"]
 
 
 def test_short_audio_is_low_confidence_and_omits_value_even_if_stable():
@@ -51,7 +54,8 @@ def test_short_audio_is_low_confidence_and_omits_value_even_if_stable():
     out = extract_key_mode_v1(_ctx(duration_seconds=3.0, windows=["F# minor"] * 4), config=cfg)
     assert out is not None
     assert out.get("confidence") == "low"
-    assert "value" not in out
+    assert out.get("value") is None
+    assert out.get("mode") is None
 
 
 def test_stable_key_returns_value_when_confident():
@@ -59,7 +63,33 @@ def test_stable_key_returns_value_when_confident():
     out = extract_key_mode_v1(_ctx(duration_seconds=60.0, windows=["F# minor"] * 8), config=cfg)
     assert out is not None
     assert out.get("confidence") in ("medium", "high")
-    assert out.get("value") == "F# minor"
+    assert out.get("value") == "F#"
+    assert out.get("mode") == "minor"
+    assert out.get("reason_codes") == ["emit_confident"]
+
+
+def test_reason_codes_order_is_deterministic() -> None:
+    cfg = EngineConfig()
+    out = extract_key_mode_v1(
+        _ctx(duration_seconds=3.0, windows=["F# minor", "A major", "F# minor", "A major"]),
+        config=cfg,
+    )
+    assert out is not None
+    assert out.get("reason_codes") == ["omitted_ambiguous_runnerup", "omitted_low_confidence"]
+
+
+def test_candidates_order_is_deterministic_on_ties() -> None:
+    cfg = EngineConfig()
+    out = extract_key_mode_v1(
+        _ctx(duration_seconds=60.0, windows=["F# minor", "A minor", "F# minor", "A minor"]),
+        config=cfg,
+    )
+    assert out is not None
+    cands = out.get("candidates") or []
+    assert cands[:2] == [
+        {"key": "F#", "mode": "minor", "score": 0.5, "family": "direct", "rank": 1},
+        {"key": "A", "mode": "minor", "score": 0.5, "family": "direct", "rank": 2},
+    ]
 
 
 def test_guest_gating_strips_candidate_metadata_and_confidence():
@@ -71,8 +101,30 @@ def test_guest_gating_strips_candidate_metadata_and_confidence():
         _test_overrides={"key_mode_hint_windows": ["F# minor"] * 8},
     )
 
-    km = out["metrics"]["key_mode"]
+    km = out["metrics"]["key"]
     assert "confidence" not in km
+    assert "reason_codes" not in km
+    assert "candidates" not in km
 
-    for c in km.get("candidates", []):
-        assert set(c.keys()) <= {"value", "rank"}
+    # Back-compat alias should not leak advanced either.
+    km_legacy = out["metrics"]["key_mode"]
+    assert "confidence" not in km_legacy
+    assert "reason_codes" not in km_legacy
+    assert "candidates" not in km_legacy
+
+
+def test_free_gating_keeps_advanced_key_fields():
+    audio = DecodedAudio(sample_rate_hz=44100, channels=2, duration_seconds=30.0)
+    out = run_analysis_v1(
+        audio,
+        "free",
+        config=EngineConfig(),
+        _test_overrides={"key_mode_hint_windows": ["F# minor"] * 8},
+    )
+
+    km = out["metrics"]["key"]
+    assert km.get("value") == "F#"
+    assert km.get("mode") == "minor"
+    assert km.get("confidence") in ("medium", "high")
+    assert km.get("reason_codes") == ["emit_confident"]
+    assert isinstance(km.get("candidates"), list) and km["candidates"]

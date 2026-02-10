@@ -51,6 +51,8 @@ def decode_wav_v1(path: str | Path, *, max_seconds: float | None = None) -> Deco
                 channels=channels,
                 duration_seconds=float(duration),
                 format="wav",
+                codec="pcm",
+                container="wav",
             )
     except wave.Error as exc:
         # Covers invalid header / unsupported codec inside WAV

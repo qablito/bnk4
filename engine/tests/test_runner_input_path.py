@@ -30,6 +30,8 @@ def test_run_analysis_v1_accepts_input_path_kw(tmp_path: Path):
 
     assert out["track"]["format"] == "wav"
     assert out["track"]["sample_rate_hz"] == 44100
+    assert out["track"]["codec"] == "pcm"
+    assert out["track"]["container"] == "wav"
     assert out["role"] == "guest"
     assert out["events"] == {}
 

@@ -30,6 +30,8 @@ def test_decode_wav_v1_reads_basic_metadata(tmp_path: Path):
 
     decoded = decode_wav_v1(wav_path)
     assert decoded.format == "wav"
+    assert decoded.codec == "pcm"
+    assert decoded.container == "wav"
     assert decoded.sample_rate_hz == 44100
     assert decoded.channels == 2
     assert 0.99 <= decoded.duration_seconds <= 1.01

@@ -135,6 +135,8 @@ def run_analysis_v1(
                     format=str(fmt) if fmt else "unknown",
                     sample_rate_hz=int(audio.sample_rate_hz),
                     channels=int(audio.channels),
+                    codec=getattr(audio, "codec", None),
+                    container=getattr(audio, "container", None),
                 )
             except (AttributeError, TypeError, ValueError) as exc:
                 raise EngineError(
@@ -220,6 +222,7 @@ def run_analysis_v1(
             if bpm_block is not None:
                 metrics["bpm"] = bpm_block
             if key_mode_block is not None:
+                metrics["key"] = key_mode_block
                 metrics["key_mode"] = key_mode_block
 
         # Final v1 packaging step (role gating).

@@ -126,6 +126,20 @@ def _package_metrics(out: dict[str, Any], *, role: Role) -> None:
             new_metrics = stripped
             changed = True
 
+        # Key/Mode v1 guest contract: keep only value + mode in key blocks.
+        for key_metric_name in ("key", "key_mode"):
+            block = new_metrics.get(key_metric_name)
+            if not isinstance(block, dict):
+                continue
+            nb = dict(block)
+            before = set(nb.keys())
+            nb.pop("candidates", None)
+            nb.pop("confidence", None)
+            nb.pop("reason_codes", None)
+            if set(nb.keys()) != before:
+                new_metrics[key_metric_name] = nb
+                changed = True
+
     # Rule: Guest must not receive bpm.value.value_exact.
     if role == "guest" and "bpm" in new_metrics and isinstance(new_metrics["bpm"], dict):
         bpm = dict(new_metrics["bpm"])

@@ -14,6 +14,8 @@ class TrackInfo:
     format: str
     sample_rate_hz: int
     channels: int
+    codec: str | None = None
+    container: str | None = None
 
 
 def now_rfc3339() -> str:
@@ -47,6 +49,8 @@ def canonical_output(
             "format": str(track.format),
             "sample_rate_hz": int(track.sample_rate_hz),
             "channels": int(track.channels),
+            "codec": track.codec,
+            "container": track.container,
         },
         "metrics": metrics or {},
         "warnings": warnings or [],

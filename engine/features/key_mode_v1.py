@@ -6,10 +6,67 @@ from engine.core.config import EngineConfig
 from engine.features.types import FeatureContext
 from engine.observability import hooks
 
+_KEY_ORDER = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+_KEY_INDEX = {k: i for i, k in enumerate(_KEY_ORDER)}
+_MODE_ORDER = ["major", "minor"]
+_MODE_INDEX = {m: i for i, m in enumerate(_MODE_ORDER)}
 
-def _windows_from_ctx(ctx: FeatureContext) -> list[str]:
+_REASON_CODE_ORDER = [
+    "omitted_ambiguous_runnerup",
+    "omitted_low_confidence",
+    "emit_confident",
+]
+
+
+def _ordered_reason_codes(codes: list[str]) -> list[str]:
+    seen = set()
+    out: list[str] = []
+    for c in _REASON_CODE_ORDER:
+        if c in codes and c not in seen:
+            seen.add(c)
+            out.append(c)
+    for c in sorted(codes):
+        if c not in seen:
+            out.append(c)
+            seen.add(c)
+    return out
+
+
+def _normalize_tonic(token: str) -> str | None:
+    s = str(token).strip().upper().replace("♯", "#").replace("♭", "B")
+    flats_to_sharps = {
+        "DB": "C#",
+        "EB": "D#",
+        "GB": "F#",
+        "AB": "G#",
+        "BB": "A#",
+    }
+    if s in flats_to_sharps:
+        s = flats_to_sharps[s]
+    if s in _KEY_INDEX:
+        return s
+    return None
+
+
+def _parse_key_mode_label(label: str) -> tuple[str | None, str | None]:
+    parts = [p for p in str(label).strip().split() if p]
+    if len(parts) < 2:
+        return None, None
+    tonic = _normalize_tonic(parts[0])
+    mode = parts[-1].lower()
+    if tonic is None or mode not in _MODE_INDEX:
+        return None, None
+    return tonic, mode
+
+
+def _windows_from_ctx(ctx: FeatureContext) -> list[tuple[str, str]]:
     if ctx.key_mode_hint_windows:
-        return [str(x) for x in ctx.key_mode_hint_windows]
+        out: list[tuple[str, str]] = []
+        for x in ctx.key_mode_hint_windows:
+            key, mode = _parse_key_mode_label(str(x))
+            if key is not None and mode is not None:
+                out.append((key, mode))
+        return out
     if ctx.key_mode_hint is None:
         return []
 
@@ -17,17 +74,10 @@ def _windows_from_ctx(ctx: FeatureContext) -> list[str]:
     # We keep at least 3 windows for stability scoring, unless audio is very short.
     dur = float(getattr(ctx.audio, "duration_seconds", 0.0) or 0.0)
     n = 2 if dur and dur < 6.0 else 3
-    return [str(ctx.key_mode_hint)] * n
-
-
-def _canonicalize_key_mode(v: str) -> str:
-    s = " ".join(str(v).strip().split())
-    lower = s.lower()
-    if lower.endswith(" major"):
-        return s[:-6].strip() + " major"
-    if lower.endswith(" minor"):
-        return s[:-6].strip() + " minor"
-    return s
+    key, mode = _parse_key_mode_label(str(ctx.key_mode_hint))
+    if key is None or mode is None:
+        return []
+    return [(key, mode)] * n
 
 
 def _confidence_level(
@@ -72,17 +122,7 @@ def extract_key_mode_v1(ctx: FeatureContext, *, config: EngineConfig) -> dict[st
         )
         return None
 
-    windows_raw = _windows_from_ctx(ctx)
-    if not windows_raw:
-        hooks.emit(
-            "feature_omitted",
-            feature="key_mode",
-            reason="confidence_below_threshold",
-            stage="feature:key_mode",
-        )
-        return None
-
-    windows = [_canonicalize_key_mode(x) for x in windows_raw if str(x).strip()]
+    windows = _windows_from_ctx(ctx)
     if not windows:
         hooks.emit(
             "feature_omitted",
@@ -92,12 +132,18 @@ def extract_key_mode_v1(ctx: FeatureContext, *, config: EngineConfig) -> dict[st
         )
         return None
 
-    counts: dict[str, int] = {}
+    counts: dict[tuple[str, str], int] = {}
     for w in windows:
         counts[w] = counts.get(w, 0) + 1
 
-    scored = [(k, counts[k] / float(len(windows))) for k in counts]
-    scored.sort(key=lambda t: (-t[1], t[0]))
+    scored = [((k, m), counts[(k, m)] / float(len(windows))) for k, m in counts]
+    scored.sort(
+        key=lambda t: (
+            -t[1],
+            _KEY_INDEX.get(t[0][0], 999),
+            _MODE_INDEX.get(t[0][1], 999),
+        )
+    )
 
     top_n = int(getattr(config.tunables, "key_mode_candidates_top_n", 5))
     scored = scored[: max(1, top_n)]
@@ -115,6 +161,9 @@ def extract_key_mode_v1(ctx: FeatureContext, *, config: EngineConfig) -> dict[st
         config=config,
     )
 
+    ambiguous_gap = float(getattr(config.tunables, "key_mode_ambiguous_gap_max", 0.15))
+    ambiguous_runner_up = bool(len(scored) > 1 and gap < ambiguous_gap)
+
     if confidence == "low":
         hooks.emit(
             "feature_omitted",
@@ -123,18 +172,38 @@ def extract_key_mode_v1(ctx: FeatureContext, *, config: EngineConfig) -> dict[st
             stage="feature:key_mode",
         )
 
+    reason_codes: list[str] = []
+    if ambiguous_runner_up:
+        reason_codes.append("omitted_ambiguous_runnerup")
+    if confidence == "low":
+        reason_codes.append("omitted_low_confidence")
+    if not reason_codes:
+        reason_codes.append("emit_confident")
+    reason_codes = _ordered_reason_codes(reason_codes)
+
     candidates_out = []
-    for i, (value, score) in enumerate(scored):
-        candidates_out.append({"value": value, "rank": i + 1, "score": float(round(score, 4))})
+    for i, ((key, mode), score) in enumerate(scored):
+        candidates_out.append(
+            {
+                "key": key,
+                "mode": mode,
+                "score": float(round(score, 4)),
+                "family": "direct",
+                "rank": i + 1,
+            }
+        )
 
     out: dict[str, Any] = {
+        "value": None,
+        "mode": None,
         "confidence": confidence,
+        "reason_codes": reason_codes,
         "candidates": candidates_out,
-        "method": "key_mode_candidates_v1",
-        "limits": "v1 is candidate-first and will omit key_mode.value when ambiguous or unstable.",
+        "method": "key_mode_global_v1",
     }
 
-    if confidence != "low":
-        out["value"] = scored[0][0]
+    if confidence != "low" and not ambiguous_runner_up:
+        out["value"] = scored[0][0][0]
+        out["mode"] = scored[0][0][1]
 
     return out

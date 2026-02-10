@@ -94,6 +94,8 @@ def _decode_mp3_via_ffmpeg_v1(path: Path) -> DecodedAudio:
             channels=int(wav_audio.channels),
             duration_seconds=float(wav_audio.duration_seconds),
             format="mp3",
+            codec="mp3",
+            container="mp3",
             bpm_hint_windows=bpm_windows,
             bpm_hint_window_details=bpm_details if bpm_details is not None else None,
         )
@@ -140,6 +142,8 @@ def decode_input_path_v1(path: Path) -> DecodedAudio:
             channels=int(wav_audio.channels),
             duration_seconds=float(wav_audio.duration_seconds),
             format="wav",
+            codec=wav_audio.codec,
+            container=wav_audio.container,
             peak_dbfs=wav_audio.peak_dbfs,
             bpm_hint_windows=bpm_windows,
             bpm_hint_window_details=bpm_details if bpm_details is not None else None,
