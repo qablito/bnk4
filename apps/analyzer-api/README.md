@@ -24,3 +24,6 @@ PYTHONPATH=. uvicorn api:app --app-dir apps/analyzer-api --host 127.0.0.1 --port
 
 - `ANALYZER_AUDIO_ROOT`:
   relative to repo root by default (`audiosToTest`), or absolute path.
+- `ANALYZER_CORS_ORIGINS`:
+  comma-separated origins for CORS (default:
+  `http://localhost:3000,http://127.0.0.1:3000`).
