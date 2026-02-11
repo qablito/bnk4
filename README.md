@@ -1,40 +1,26 @@
-# bnk-analysis-engine (Engine v1)
+# BeetsNKeys (bnk4)
 
-Contract-first audio analysis engine for BeetsNKeys (bnk4).
+BeetsNKeys is a contract-first audio analysis project focused on deterministic, role-safe outputs. In this repository, the main shipped component is the Engine v1 analysis core.
 
-References:
-- Engine spec: `ANALYSIS_ENGINE_V1.md`
-- Canonical output contract: `CONTRACTS/analysis_output.md`
-- Security invariants + normalized error model: `SECURITY_SPEC.md`
+## Repository
+- `engine/`: analysis pipeline, packaging, tests, and eval harness.
+- `apps/`: local product surfaces (API/UI) built on top of engine outputs.
+- `docs/`: project status, architecture, contract, and developer docs.
+- `scripts/`: development helpers.
 
-## Tooling
-
-Bootstrap a local venv and run tests:
-```sh
+## Quickstart
+```bash
 ./scripts/bootstrap_dev.sh
 source .venv/bin/activate
+python3 -m ruff format engine conftest.py engine/eval engine/tests
+python3 -m ruff check engine conftest.py engine/eval engine/tests
+pytest -q -rs
+PYTHONPATH=. python3 engine/eval/run_eval.py --fixtures engine/eval/fixtures.csv --top-n 10
 ```
 
-Format:
-```sh
-./scripts/fmt.sh
-```
-
-Lint + tests:
-```sh
-./scripts/lint.sh
-```
-
-Optional pre-commit:
-```sh
-python -m pip install pre-commit
-pre-commit install
-```
-
-Build artifacts:
-```sh
-python -m build
-python -m twine check dist/*
-```
-
-Note: Engine v1 intentionally avoids heavy audio dependencies (no numpy/librosa/etc).
+## Docs
+- Project status: `docs/PROJECT_STATUS.md`
+- Development guide: `docs/DEVELOPMENT.md`
+- Architecture: `docs/ARCHITECTURE.md`
+- Engine v1 contract: `docs/ENGINE_V1_CONTRACT.md`
+- Security invariants: `docs/SECURITY_SPEC.md`

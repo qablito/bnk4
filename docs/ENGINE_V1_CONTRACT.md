@@ -1,12 +1,13 @@
 # Engine v1 Contract (Public)
 
 This document freezes the public output contract for Engine v1.
+
 Scope:
 - Global BPM (raw + reportable)
 - Global Key/Mode
 - Metadata only (no loudness, no section-level tonality, no Camelot)
 
-Notes:
+Rules:
 - Key may be emitted while mode is withheld.
 - If mode is withheld, output MUST include `mode: null` and reason code
   `mode_withheld_insufficient_evidence` (free/pro only).

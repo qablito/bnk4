@@ -2,7 +2,7 @@
 Ingest stage (v1).
 
 Responsibilities:
-- Enforce upload invariants (SECURITY_SPEC.md)
+- Enforce upload invariants (`docs/SECURITY_SPEC.md`)
 - Validate format and size
 - Decode to internal PCM representation
 - Produce canonical track metadata
