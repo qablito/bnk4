@@ -6,6 +6,7 @@ beforeEach(() => {
   vi.restoreAllMocks();
   vi.resetModules();
   vi.stubEnv("DEV_MOCK", "0");
+  vi.stubEnv("NEXT_PUBLIC_DEV_MOCK", "0");
   vi.stubEnv("NEXT_PUBLIC_ANALYZER_API_URL", BASE_URL);
 });
 
@@ -16,6 +17,24 @@ async function importClient() {
 describe("api-client", () => {
   it("uses same-origin base URL when DEV_MOCK=1", async () => {
     vi.stubEnv("DEV_MOCK", "1");
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ samples: [] }),
+      })
+    );
+
+    const { fetchSamples } = await importClient();
+    await fetchSamples();
+
+    const fetchMock = vi.mocked(fetch);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/samples");
+  });
+
+  it("uses same-origin base URL when NEXT_PUBLIC_DEV_MOCK=1", async () => {
+    vi.stubEnv("NEXT_PUBLIC_DEV_MOCK", "1");
 
     vi.stubGlobal(
       "fetch",

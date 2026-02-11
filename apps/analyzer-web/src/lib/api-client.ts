@@ -7,10 +7,12 @@ import type {
 import { APIError } from "@/types/api";
 import type { AnalysisOutput } from "@/types/engine-v1";
 
-const BASE_URL =
-  process.env.DEV_MOCK === "1"
-    ? ""
-    : process.env.NEXT_PUBLIC_ANALYZER_API_URL || "http://localhost:8000";
+const DEV_MOCK_ENABLED =
+  process.env.NEXT_PUBLIC_DEV_MOCK === "1" || process.env.DEV_MOCK === "1";
+
+const BASE_URL = DEV_MOCK_ENABLED
+  ? ""
+  : process.env.NEXT_PUBLIC_ANALYZER_API_URL || "http://localhost:8000";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 const POLL_INTERVAL_MS = 1_000;
