@@ -10,11 +10,24 @@ source .venv/bin/activate
 ```bash
 python3 -m ruff format engine conftest.py engine/eval engine/tests
 python3 -m ruff check engine conftest.py engine/eval engine/tests
+python3 -m ruff format apps/analyzer-api
+python3 -m ruff check apps/analyzer-api
 ```
 
 ## Tests
 ```bash
 pytest -q -rs
+```
+
+## Analyzer API (Local)
+```bash
+python3 -m pip install -r apps/analyzer-api/requirements.txt
+PYTHONPATH=. uvicorn api:app --app-dir apps/analyzer-api --host 127.0.0.1 --port 8000 --reload
+```
+
+## Analyzer Web -> Analyzer API
+```bash
+NEXT_PUBLIC_ANALYZER_API_URL=http://localhost:8000 npm --prefix apps/analyzer-web run dev
 ```
 
 ## Evaluation Harness
