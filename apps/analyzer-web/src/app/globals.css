@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-surface: #ffffff;
+  --color-surface-elevated: #f8fafc;
+  --color-border: #e2e8f0;
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #64748b;
+  --color-accent: #6366f1;
+  --color-accent-hover: #4f46e5;
+  --gradient-from: #ede9fe;
+  --gradient-to: #e0f2fe;
+  --glass-bg: rgba(255, 255, 255, 0.6);
+  --glass-border: rgba(255, 255, 255, 0.3);
+  --glass-strong-bg: rgba(255, 255, 255, 0.8);
+  --glass-strong-border: rgba(255, 255, 255, 0.5);
+}
+
+.dark {
+  --color-surface: #0f172a;
+  --color-surface-elevated: #1e293b;
+  --color-border: #334155;
+  --color-text-primary: #f1f5f9;
+  --color-text-secondary: #94a3b8;
+  --color-accent: #818cf8;
+  --color-accent-hover: #a5b4fc;
+  --gradient-from: #1e1b4b;
+  --gradient-to: #0c4a6e;
+  --glass-bg: rgba(15, 23, 42, 0.6);
+  --glass-border: rgba(51, 65, 85, 0.3);
+  --glass-strong-bg: rgba(15, 23, 42, 0.8);
+  --glass-strong-border: rgba(51, 65, 85, 0.5);
+}
+
+body {
+  color: var(--color-text-primary);
+  background: linear-gradient(135deg, var(--gradient-from), var(--gradient-to));
+  min-height: 100vh;
+}
+
+@layer components {
+  .glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+  }
+
+  .glass-strong {
+    background: var(--glass-strong-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-strong-border);
+  }
+}
