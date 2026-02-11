@@ -102,15 +102,10 @@ export async function fetchSamples(): Promise<SamplesResponse> {
 export async function submitAnalysis(
   req: AnalyzeRequest
 ): Promise<AnalysisOutput | JobStatusResponse> {
-  const payload =
-    req.input.kind === "sample_id"
-      ? { role: req.role, sample_id: req.input.sample_id }
-      : { role: req.role, sample_url: req.input.url };
-
   const res = await fetchWithTimeout(`${BASE_URL}/analyze`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(req),
   });
   return handleResponse<AnalysisOutput | JobStatusResponse>(res);
 }

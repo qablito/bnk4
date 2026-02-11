@@ -75,7 +75,10 @@ describe("api-client", () => {
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(init.method).toBe("POST");
     expect(init.headers).toEqual({ "Content-Type": "application/json" });
-    expect(JSON.parse(String(init.body))).toEqual({ role: "pro", sample_id: "s2" });
+    expect(JSON.parse(String(init.body))).toEqual({
+      role: "pro",
+      input: { kind: "sample_id", sample_id: "s2" },
+    });
   });
 
   it("submits URL as JSON payload", async () => {
@@ -94,7 +97,7 @@ describe("api-client", () => {
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(JSON.parse(String(init.body))).toEqual({
       role: "pro",
-      sample_url: "https://x.test/t.mp3",
+      input: { kind: "url", url: "https://x.test/t.mp3" },
     });
   });
 
