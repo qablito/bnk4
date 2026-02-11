@@ -8,51 +8,32 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Virtual envs / local env
 .venv/
 .venv*/
 venv/
 .venv-*/
 .env
 .env.*
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
 
 # Packaging
 *.egg-info/
 
-# Node / Frontend (si aplica)
+# Node / Frontend
 node_modules/
 .next/
 dist/
 build/
+coverage/
 
-# Logs
-*.log
+# Local artifacts
+*.asd
+engine/eval/samples/
+audiosToTest/
 
-# Audio / Large artifacts (ajusta si quieres versionar fixtures)
-*.wav
-*.mp3
-*.flac
-*.aiff
-*.m4a
-*.ogg
-*.zip
-*.pdf
-
-# Local dev / Supabase
+# Local infra
 .supabase/
-cat >> .gitignore <<'EOF'
-
-# macOS
-.DS_Store
-
-# python
-__pycache__/
-*.pyc
-
-# Local DAW / analysis artifacts
-*.asd
-
-# Local DAW / analysis artifacts
-*.asd
