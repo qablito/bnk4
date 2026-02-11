@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { fetchSamples } from "@/lib/api-client";
+import { fetchSamples, getBaseUrl } from "@/lib/api-client";
 import type { AnalyzeRequest, AnalyzeUploadParams } from "@/types/api";
 import type { Role } from "@/types/engine-v1";
 import { Card } from "./ui/card";
@@ -16,37 +16,62 @@ interface AnalyzeFormProps {
 }
 
 export function AnalyzeForm({ onSubmit, isLoading }: AnalyzeFormProps) {
-  const [mode, setMode] = useState<InputMode>("upload");
+  const apiVersion = process.env.NEXT_PUBLIC_ANALYZER_API_VERSION || "v1";
+  const isV1 = apiVersion === "v1";
+  const [mode, setMode] = useState<InputMode>(isV1 ? "sample" : "upload");
   const [role, setRole] = useState<Role>("pro");
   const [file, setFile] = useState<File | null>(null);
   const [sampleId, setSampleId] = useState("");
   const [url, setUrl] = useState("");
   const [samples, setSamples] = useState<Array<{ id: string; name: string }>>([]);
+  const [samplesLoaded, setSamplesLoaded] = useState(false);
+
+  useEffect(() => {
+    if (isV1 && mode !== "sample") {
+      setMode("sample");
+    }
+  }, [isV1, mode]);
 
   useEffect(() => {
     let active = true;
     void fetchSamples()
       .then((res) => {
         if (!active) return;
-        setSamples(res.samples.map((s) => ({ id: s.id, name: s.name })));
+        setSamples(
+          res.samples
+            .map((sample) => {
+              const id = sample.sample_id ?? sample.id ?? "";
+              const name = sample.filename ?? sample.name ?? id;
+              return { id, name };
+            })
+            .filter((sample) => sample.id.length > 0)
+        );
+        setSamplesLoaded(true);
       })
       .catch(() => {
         if (!active) return;
         setSamples([]);
+        setSamplesLoaded(true);
       });
     return () => {
       active = false;
     };
   }, []);
 
+  const uploadEnabled = !isV1;
+  const urlEnabled = !isV1;
+
   const canSubmit = useMemo(() => {
+    if (mode === "upload" && !uploadEnabled) return false;
+    if (mode === "url" && !urlEnabled) return false;
     if (mode === "upload") return file !== null;
     if (mode === "sample") return sampleId.trim().length > 0;
     return url.trim().length > 0;
-  }, [file, mode, sampleId, url]);
+  }, [file, mode, sampleId, uploadEnabled, url, urlEnabled]);
 
   function buildPayload(): AnalyzePayload | null {
     if (mode === "upload") {
+      if (!uploadEnabled) return null;
       if (!file) return null;
       return { role, file };
     }
@@ -55,6 +80,7 @@ export function AnalyzeForm({ onSubmit, isLoading }: AnalyzeFormProps) {
       return { role, input: { kind: "sample_id", sample_id: sampleId } };
     }
     if (!url.trim()) return null;
+    if (!urlEnabled) return null;
     return { role, input: { kind: "url", url: url.trim() } };
   }
 
@@ -78,9 +104,9 @@ export function AnalyzeForm({ onSubmit, isLoading }: AnalyzeFormProps) {
                 ? "bg-accent text-white border-accent"
                 : "bg-surface text-text-secondary border-border"
             }`}
-            disabled={isLoading}
+            disabled={isLoading || !uploadEnabled}
           >
-            Upload file
+            {uploadEnabled ? "Upload file" : "Upload file (Coming in v1.1)"}
           </button>
           <button
             type="button"
@@ -104,9 +130,9 @@ export function AnalyzeForm({ onSubmit, isLoading }: AnalyzeFormProps) {
                 ? "bg-accent text-white border-accent"
                 : "bg-surface text-text-secondary border-border"
             }`}
-            disabled={isLoading}
+            disabled={isLoading || !urlEnabled}
           >
-            URL
+            {urlEnabled ? "URL" : "URL (Coming in v1.1)"}
           </button>
         </div>
 
@@ -156,6 +182,16 @@ export function AnalyzeForm({ onSubmit, isLoading }: AnalyzeFormProps) {
                 </option>
               ))}
             </select>
+          </div>
+        )}
+
+        {samplesLoaded && samples.length === 0 && (
+          <div
+            data-testid="samples-empty-warning"
+            className="rounded-lg border border-amber-300/60 bg-amber-50/60 px-3 py-2 text-sm text-amber-800"
+          >
+            <p>No samples found. Check ANALYZER_AUDIO_ROOT on the API.</p>
+            <p data-testid="samples-endpoint">Endpoint: {getBaseUrl()}</p>
           </div>
         )}
 

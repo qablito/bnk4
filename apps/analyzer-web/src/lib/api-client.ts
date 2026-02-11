@@ -14,6 +14,10 @@ const BASE_URL = DEV_MOCK_ENABLED
   ? ""
   : process.env.NEXT_PUBLIC_ANALYZER_API_URL || "http://localhost:8000";
 
+export function getBaseUrl(): string {
+  return BASE_URL || "(same-origin)";
+}
+
 const DEFAULT_TIMEOUT_MS = 10_000;
 const POLL_INTERVAL_MS = 1_000;
 const MAX_POLL_ATTEMPTS = 60;
@@ -44,12 +48,14 @@ function parseErrorPayload(body: unknown, status: number, fallback: string) {
   let message = fallback;
 
   if (Array.isArray(payload?.detail) && payload.detail.length > 0) {
-    const first = payload.detail[0] as Record<string, unknown>;
-    if (typeof first?.msg === "string") {
-      message = first.msg;
-    } else {
-      message = JSON.stringify(first);
-    }
+    const messages = payload.detail.map((item) => {
+      const detail = item as Record<string, unknown>;
+      if (typeof detail?.msg === "string" && detail.msg.trim().length > 0) {
+        return detail.msg.trim();
+      }
+      return JSON.stringify(detail);
+    });
+    message = messages.join("; ");
     if (status === 422 && code === "UNKNOWN") {
       code = "VALIDATION_ERROR";
     }

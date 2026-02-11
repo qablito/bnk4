@@ -17,9 +17,13 @@ export interface AnalyzeUploadParams {
 // ---------------------------------------------------------------------------
 export interface SamplesResponse {
   samples: Array<{
-    id: string;
-    name: string;
-    url: string;
+    id?: string;
+    name?: string;
+    url?: string;
+    sample_id?: string;
+    filename?: string;
+    rel_path?: string;
+    size_bytes?: number;
     duration_seconds?: number;
   }>;
 }

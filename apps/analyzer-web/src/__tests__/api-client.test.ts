@@ -26,11 +26,12 @@ describe("api-client", () => {
       })
     );
 
-    const { fetchSamples } = await importClient();
+    const { fetchSamples, getBaseUrl } = await importClient();
     await fetchSamples();
 
     const fetchMock = vi.mocked(fetch);
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/samples");
+    expect(getBaseUrl()).toBe("(same-origin)");
   });
 
   it("uses same-origin base URL when NEXT_PUBLIC_DEV_MOCK=1", async () => {
@@ -44,11 +45,17 @@ describe("api-client", () => {
       })
     );
 
-    const { fetchSamples } = await importClient();
+    const { fetchSamples, getBaseUrl } = await importClient();
     await fetchSamples();
 
     const fetchMock = vi.mocked(fetch);
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/samples");
+    expect(getBaseUrl()).toBe("(same-origin)");
+  });
+
+  it("returns configured backend base URL", async () => {
+    const { getBaseUrl } = await importClient();
+    expect(getBaseUrl()).toBe(BASE_URL);
   });
 
   it("submits sample_id as JSON payload", async () => {
@@ -121,7 +128,13 @@ describe("api-client", () => {
         ok: false,
         status: 422,
         statusText: "Unprocessable Entity",
-        json: () => Promise.resolve({ detail: [{ msg: "field required", loc: ["body", "file"] }] }),
+        json: () =>
+          Promise.resolve({
+            detail: [
+              { msg: "field required", loc: ["body", "file"] },
+              { msg: "role must be one of guest/free/pro", loc: ["body", "role"] },
+            ],
+          }),
       })
     );
 
@@ -133,7 +146,7 @@ describe("api-client", () => {
       name: "APIError",
       status: 422,
       code: "VALIDATION_ERROR",
-      message: "field required",
+      message: "field required; role must be one of guest/free/pro",
     });
   });
 
