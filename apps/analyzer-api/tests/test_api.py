@@ -5,9 +5,42 @@ import pytest
 pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
 
+import api as api_mod
 from api import app
 from fastapi.testclient import TestClient
 from service import get_audio_root, list_samples
+
+
+def test_health_hides_audio_root_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ANALYZER_EXPOSE_PATHS", raising=False)
+    monkeypatch.setattr(api_mod, "get_audio_root", lambda: "/tmp/audio-root")
+    monkeypatch.setattr(
+        api_mod,
+        "list_samples",
+        lambda _audio_root: [{"sample_id": "a.wav"}, {"sample_id": "b.mp3"}],
+    )
+
+    client = TestClient(app)
+    resp = client.get("/health")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "ok", "audio_root": "hidden", "n_samples": 2}
+
+
+def test_health_exposes_audio_root_when_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ANALYZER_EXPOSE_PATHS", "1")
+    monkeypatch.setattr(api_mod, "get_audio_root", lambda: "/tmp/audio-root")
+    monkeypatch.setattr(api_mod, "list_samples", lambda _audio_root: [])
+
+    client = TestClient(app)
+    resp = client.get("/health")
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "status": "ok",
+        "audio_root": "/tmp/audio-root",
+        "n_samples": 0,
+    }
 
 
 def test_jobs_not_supported_route() -> None:

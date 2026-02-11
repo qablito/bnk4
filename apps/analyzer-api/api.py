@@ -42,6 +42,20 @@ def _validation_error(msg: str) -> JSONResponse:
     return JSONResponse(status_code=422, content={"detail": [{"msg": msg}]})
 
 
+def _expose_paths_enabled() -> bool:
+    return os.getenv("ANALYZER_EXPOSE_PATHS") == "1"
+
+
+@app.get("/health")
+def get_health() -> dict[str, Any]:
+    audio_root = get_audio_root()
+    return {
+        "status": "ok",
+        "audio_root": str(audio_root) if _expose_paths_enabled() else "hidden",
+        "n_samples": len(list_samples(audio_root)),
+    }
+
+
 @app.get("/samples")
 def get_samples() -> dict[str, Any]:
     return {"samples": list_samples(get_audio_root())}
