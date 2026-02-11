@@ -33,7 +33,8 @@ def canonical_output(
     warnings: list | None = None,
 ) -> dict[str, Any]:
     """
-    Canonical analysis output object per ANALYSIS_ENGINE_V1.md / CONTRACTS/analysis_output.md.
+    Canonical analysis output object per docs/ENGINE_V1_CONTRACT.md and
+    CONTRACTS/analysis_output.md.
 
     Rules enforced here (minimal):
     - Guest MUST receive events: {} (or omit; we choose {} for stability).

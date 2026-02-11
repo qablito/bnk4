@@ -5,4 +5,4 @@ Responsibilities:
 - Confidence computation
 - Event consolidation into ranges
 
-Implements all tunables defined in ANALYSIS_ENGINE_V1.md.
+Implements tunables documented in `docs/ARCHITECTURE.md`.

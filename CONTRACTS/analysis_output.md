@@ -3,8 +3,8 @@
 This contract defines the canonical analysis JSON shape and role gating semantics. It is normative for future implementation.
 
 References:
-- Engine spec: `ANALYSIS_ENGINE_V1.md`
-- Security invariants and error model: `SECURITY_SPEC.md`
+- Engine contract: `docs/ENGINE_V1_CONTRACT.md`
+- Security invariants and error model: `docs/SECURITY_SPEC.md`
 - Precision Contract schema: `CONTRACTS/precision_contract.schema.json`
 
 ## 1. Top-Level Shape

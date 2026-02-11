@@ -10,7 +10,7 @@ class EngineV1Tunables:
     Engine v1 tunables (normative defaults).
 
     These are *behavioral thresholds* and consolidation parameters that must
-    remain stable unless we bump the spec. Values are derived from ANALYSIS_ENGINE_V1.md.
+    remain stable unless we bump the spec. Values are derived from docs.
     """
 
     # Internal processing

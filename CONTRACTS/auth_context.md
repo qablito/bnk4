@@ -2,7 +2,7 @@
 
 This document defines the minimum JWT claims and DPoP requirements for BeetsNKeys.
 
-Normative security invariants live in `SECURITY_SPEC.md`. This document mirrors the minimum protocol surface area.
+Normative security invariants live in `docs/SECURITY_SPEC.md`. This document mirrors the minimum protocol surface area.
 
 ## Token Classes
 

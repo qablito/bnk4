@@ -3,7 +3,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-TARGET = ROOT / "THREAT_MODEL.md"
+TARGET = ROOT / "docs" / "THREAT_MODEL.md"
 
 BANNED = [
     {
@@ -119,12 +119,12 @@ def main() -> int:
                 errors.append((i, rule["name"], raw))
 
     if errors:
-        print("FAILED: banned patterns found in THREAT_MODEL.md")
+        print("FAILED: banned patterns found in docs/THREAT_MODEL.md")
         for i, name, raw in errors:
             print(f"- line {i}: {name}: {raw}")
         return 1
 
-    print("OK: THREAT_MODEL.md passed")
+    print("OK: docs/THREAT_MODEL.md passed")
     return 0
 
 
